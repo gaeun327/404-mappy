@@ -1,54 +1,81 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   StyleSheet, View, Text, TouchableOpacity, TextInput, Modal, Alert, 
-  TouchableWithoutFeedback, FlatList, Dimensions, ActivityIndicator, Keyboard 
+  Dimensions, ActivityIndicator, Animated, PanResponder, ScrollView, FlatList
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
-import { db } from '../firebaseConfig'; // auth 제거(필요시 추가), db는 유지
-import { collection, addDoc, getDocs, query, orderBy } from 'firebase/firestore';
+import { db, auth } from '../firebaseConfig'; 
+import { collection, addDoc, getDocs, query, orderBy, where, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 
-const { width } = Dimensions.get('window');
-
-// 하버사인 거리 계산 함수
-const getDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371e3;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
-};
+const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const mapRef = useRef(null);
   const [markers, setMarkers] = useState([]);
+  const [myPlaces, setMyPlaces] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // 모달 상태
-  const [regModalVisible, setRegModalVisible] = useState(false);
-  const [detailModalVisible, setDetailModalVisible] = useState(false);
-  const [selectedPlace, setSelectedPlace] = useState(null);
-  const [tempCoords, setTempCoords] = useState(null);
+  const [filterType, setFilterType] = useState('all'); // all, good, bad
+  const [activeTab, setActiveTab] = useState(0); 
 
-  // 등록 폼 상태
-  const [placeName, setPlaceName] = useState('');
-  const [description, setDescription] = useState('');
-  const [recommend, setRecommend] = useState('good');
+  // --- 등록 모달 상태 ---
+  const [modalVisible, setModalVisible] = useState(false);
+  const [newCoords, setNewCoords] = useState(null);
+  const [title, setTitle] = useState('');
+  const [desc, setDesc] = useState('');
+  const [rating, setRating] = useState(5);
+  const [type, setType] = useState('good'); // good or bad
+
+  // --- 바텀 시트 애니메이션 ---
+  const sheetMinHeight = 120; 
+  const sheetMaxHeight = SCREEN_HEIGHT * 0.85; 
+  const panY = useRef(new Animated.Value(SCREEN_HEIGHT - sheetMinHeight)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (evt, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderMove: (e, gestureState) => {
+        const newY = SCREEN_HEIGHT - sheetMinHeight + gestureState.dy;
+        if (newY >= SCREEN_HEIGHT - sheetMaxHeight && newY <= SCREEN_HEIGHT - sheetMinHeight) {
+          panY.setValue(newY);
+        }
+      },
+      onPanResponderRelease: (e, gestureState) => {
+        if (gestureState.dy < -50) {
+          Animated.spring(panY, { toValue: SCREEN_HEIGHT - sheetMaxHeight, useNativeDriver: false }).start();
+        } else {
+          Animated.spring(panY, { toValue: SCREEN_HEIGHT - sheetMinHeight, useNativeDriver: false }).start();
+        }
+      },
+    })
+  ).current;
 
   useEffect(() => {
     fetchMarkers();
     getCurrentLocation();
+    fetchMyPlaces();
   }, []);
+
+  useEffect(() => { if (activeTab === 3) fetchMyPlaces(); }, [activeTab]);
 
   const getCurrentLocation = async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
     if (status === 'granted') {
       let loc = await Location.getCurrentPositionAsync({});
       setUserLocation(loc.coords);
+      moveToLocation(loc.coords.latitude, loc.coords.longitude);
     }
+  };
+
+  const moveToLocation = (lat, lng) => {
+    mapRef.current?.animateToRegion({
+      latitude: lat,
+      longitude: lng,
+      latitudeDelta: 0.005,
+      longitudeDelta: 0.005,
+    }, 1000);
   };
 
   const fetchMarkers = async () => {
@@ -56,226 +83,275 @@ export default function HomeScreen() {
       const q = query(collection(db, "places"), orderBy("createdAt", "desc"));
       const snap = await getDocs(q);
       setMarkers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    } catch (e) { console.log("불러오기 에러:", e); }
+    } catch (e) { console.log("마커 로딩 에러:", e); }
   };
 
-  // ⭐ 추가된 기능: 지역명 검색 시 지도 이동
-  const handleSearchLocation = async () => {
-    if (!searchQuery.trim()) return;
+  const fetchMyPlaces = async () => {
+    if (!auth.currentUser) return;
+    const q = query(collection(db, "places"), where("userEmail", "==", auth.currentUser.email));
+    const snap = await getDocs(q);
+    setMyPlaces(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  };
+
+  // --- 지도를 꾹 눌렀을 때 장소 등록 ---
+  const handleLongPress = (e) => {
+    setNewCoords(e.nativeEvent.coordinate);
+    setModalVisible(true);
+  };
+
+  const savePlace = async () => {
+    if (!title) return Alert.alert("이름을 입력해주세요!");
     try {
-      const result = await Location.geocodeAsync(searchQuery);
-      if (result.length > 0) {
-        const { latitude, longitude } = result[0];
-        mapRef.current?.animateToRegion({
-          latitude,
-          longitude,
-          latitudeDelta: 0.008,
-          longitudeDelta: 0.008,
-        }, 1000);
-        Keyboard.dismiss(); // 검색 후 키보드 닫기
-      } else {
-        // 지역 검색 결과가 없으면 기존처럼 마커 필터링 유지 (알림은 생략 가능)
-      }
-    } catch (e) {
-      console.log("검색 에러:", e);
+      await addDoc(collection(db, "places"), {
+        title,
+        description: desc,
+        rating,
+        type,
+        coordinate: newCoords,
+        userEmail: auth.currentUser.email,
+        createdAt: serverTimestamp(),
+      });
+      setModalVisible(false);
+      setTitle(''); setDesc('');
+      fetchMarkers();
+      fetchMyPlaces();
+    } catch (e) { console.log("저장 에러:", e); }
+  };
+
+  const deletePlace = async (id) => {
+    Alert.alert("삭제", "정말 삭제할까요?", [
+      { text: "취소" },
+      { text: "삭제", onPress: async () => {
+          await deleteDoc(doc(db, "places", id));
+          fetchMarkers(); fetchMyPlaces();
+      }}
+    ]);
+  };
+
+  // 🏆 9단계 등급 로직
+  const getUserLevel = (count) => {
+    if (count >= 50) return { name: "마스터 👑", color: "#FFD700", next: "MAX" };
+    if (count >= 40) return { name: "인싸 큐레이터", color: "#6C5CE7", next: 50 - count };
+    if (count >= 30) return { name: "트렌드 헌터", color: "#A29BFE", next: 40 - count };
+    if (count >= 20) return { name: "숨은스팟 발견자", color: "#00CEC9", next: 30 - count };
+    if (count >= 15) return { name: "로컬 탐색자", color: "#81ECEC", next: 20 - count };
+    if (count >= 10) return { name: "길잡이", color: "#FAB1A0", next: 15 - count };
+    if (count >= 5)  return { name: "지도 입문자", color: "#FFEAA7", next: 10 - count };
+    if (count >= 2)  return { name: "동네 탐험가", color: "#55EFC4", next: 5 - count };
+    return { name: "새싹 탐험가 🌱", color: "#00B894", next: 2 - count };
+  };
+
+  const level = getUserLevel(myPlaces.length);
+  
+  // 검색 및 타입 필터링 적용
+  const filteredMarkers = markers.filter(m => {
+    const matchSearch = m.title.includes(searchQuery);
+    const matchType = filterType === 'all' || m.type === filterType;
+    return matchSearch && matchType;
+  });
+
+  const renderTabContent = () => {
+    switch(activeTab) {
+      case 0: return (
+        <View style={styles.tabInner}>
+          <Text style={styles.tabTitle}>👥 실시간 추천 피드</Text>
+          <FlatList 
+            data={markers}
+            keyExtractor={item => item.id}
+            renderItem={({item}) => (
+              <TouchableOpacity style={styles.feedCard} onPress={() => moveToLocation(item.coordinate.latitude, item.coordinate.longitude)}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.feedUser}>{item.userEmail?.split('@')[0]}님</Text>
+                  <Text style={[styles.feedTag, {color: item.type === 'good' ? '#007AFF' : '#FF3B30'}]}>
+                    {item.type === 'good' ? '👍 추천' : '⚠️ 주의'}
+                  </Text>
+                </View>
+                <Text style={styles.feedPlace}>{item.title}</Text>
+                <Text style={styles.feedDesc} numberOfLines={1}>{item.description}</Text>
+              </TouchableOpacity>
+            )}
+            contentContainerStyle={{paddingBottom: 150}}
+          />
+        </View>
+      );
+      case 1: return (
+        <View style={styles.tabInner}>
+          <Text style={styles.tabTitle}>🤖 AI 메뉴 추천</Text>
+          <View style={styles.aiCard}>
+            <Ionicons name="sparkles" size={24} color="#007AFF" />
+            <Text style={styles.aiText}>"팀장님, 지금 위치 근처에는 평점 4.8인 '성수 소문난 감자탕'이 가장 핫해요!"</Text>
+          </View>
+          <TextInput style={styles.chatInput} placeholder="메뉴 추천을 받아보세요..." />
+        </View>
+      );
+      case 3: return (
+        <ScrollView style={styles.tabInner} showsVerticalScrollIndicator={false}>
+          <Text style={styles.tabTitle}>내 프로필</Text>
+          <View style={styles.profileCard}>
+            <View style={[styles.levelBadge, {backgroundColor: level.color}]}>
+              <Text style={styles.levelText}>{level.name}</Text>
+            </View>
+            <Text style={styles.userEmail}>{auth.currentUser?.email}</Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statBox}><Text style={styles.statVal}>{myPlaces.length}</Text><Text style={styles.statLabel}>등록 장소</Text></View>
+              <View style={styles.divider} />
+              <View style={styles.statBox}><Text style={styles.statVal}>{myPlaces.length * 100}P</Text><Text style={styles.statLabel}>포인트</Text></View>
+            </View>
+          </View>
+          <Text style={styles.sectionTitle}>내가 공유한 장소</Text>
+          {myPlaces.map(item => (
+            <View key={item.id} style={styles.placeItem}>
+              <View style={{flex:1}}>
+                <Text style={styles.placeTitle}>{item.title}</Text>
+                <View style={{flexDirection:'row'}}>{[1,2,3,4,5].map(i=><Ionicons key={i} name={i<=item.rating?"star":"star-outline"} size={12} color="#FFD700" />)}</View>
+              </View>
+              <TouchableOpacity onPress={() => deletePlace(item.id)}><Ionicons name="trash-outline" size={18} color="#FF3B30" /></TouchableOpacity>
+            </View>
+          ))}
+          <View style={{height: 200}} />
+        </ScrollView>
+      );
+      default: return <View style={styles.emptyView}><Text>준비 중...</Text></View>;
     }
   };
-
-  const moveToUserLocation = () => {
-    if (userLocation) {
-      mapRef.current?.animateToRegion({
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      }, 1000);
-    }
-  };
-
-  const handleRegister = async () => {
-    if (!placeName) return Alert.alert("알림", "상호명을 입력해주세요.");
-    if (!userLocation || !tempCoords) return Alert.alert("알림", "위치 정보를 확인 중입니다.");
-    
-    const dist = getDistance(userLocation.latitude, userLocation.longitude, tempCoords.latitude, tempCoords.longitude);
-    if (dist > 200) return Alert.alert("인증 실패", "해당 장소 근처(200m)에서만 등록 가능합니다.");
-    
-    await addDoc(collection(db, "places"), {
-      title: placeName,
-      description,
-      type: recommend,
-      coordinate: tempCoords,
-      createdAt: new Date(),
-    });
-    setRegModalVisible(false);
-    setPlaceName(''); setDescription('');
-    fetchMarkers();
-  };
-
-  // 검색어에 따른 마커 필터링
-  const filteredMarkers = markers.filter(m => m.title.includes(searchQuery));
 
   return (
     <View style={styles.container}>
-      {/* 상단 검색바 */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Ionicons name="search" size={18} color="#007AFF" style={{marginRight: 10}} />
-          <TextInput 
-            style={styles.searchInput} 
-            placeholder="'성수동' 또는 장소명 검색" 
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
-            onSubmitEditing={handleSearchLocation} // 엔터 누르면 지역 이동
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={18} color="#ccc" />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
+      {/* 지도 영역 */}
       <MapView 
         ref={mapRef} 
         style={styles.map} 
-        showsUserLocation
-        onLongPress={(e) => { setTempCoords(e.nativeEvent.coordinate); setRegModalVisible(true); }}
+        showsUserLocation 
+        onLongPress={handleLongPress}
       >
         {filteredMarkers.map(m => (
           <Marker 
             key={m.id} 
             coordinate={m.coordinate} 
-            pinColor={m.type === 'good' ? '#007AFF' : '#FF3B30'}
-            onPress={() => { setSelectedPlace(m); setDetailModalVisible(true); }}
+            title={m.title} 
+            pinColor={m.type === 'good' ? '#007AFF' : '#FF3B30'} 
           />
         ))}
       </MapView>
 
+      {/* 상단 검색 및 필터 */}
+      <View style={styles.topContainer}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={18} color="#007AFF" />
+          <TextInput style={styles.searchInput} placeholder="맛집, 카페 검색" value={searchQuery} onChangeText={setSearchQuery} />
+        </View>
+        <View style={styles.filterRow}>
+          <FilterBtn label="전체" active={filterType==='all'} onPress={()=>setFilterType('all')} />
+          <FilterBtn label="👍 추천" active={filterType==='good'} onPress={()=>setFilterType('good')} />
+          <FilterBtn label="⚠️ 주의" active={filterType==='bad'} onPress={()=>setFilterType('bad')} />
+        </View>
+      </View>
+
       {/* 내 위치 버튼 */}
-      <TouchableOpacity style={styles.myLocationBtn} onPress={moveToUserLocation}>
-        <Ionicons name="locate" size={24} color="#007AFF" />
+      <TouchableOpacity style={styles.myLocationBtn} onPress={getCurrentLocation}>
+        <Ionicons name="locate" size={28} color="#007AFF" />
       </TouchableOpacity>
 
-      {/* 하단 리스트 영역 */}
-      <View style={styles.listContainer}>
-        <Text style={styles.listHeader}>주변 인증 장소</Text>
-        <FlatList
-          data={filteredMarkers}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <TouchableOpacity 
-              style={styles.card} 
-              onPress={() => {
-                mapRef.current?.animateToRegion({ ...item.coordinate, latitudeDelta: 0.005, longitudeDelta: 0.005 }, 500);
-                setSelectedPlace(item);
-                setDetailModalVisible(true);
-              }}
-            >
-              <View style={[styles.cardTag, {backgroundColor: item.type === 'good' ? '#E1F0FF' : '#FFEBEB'}]}>
-                <Text style={{color: item.type === 'good' ? '#007AFF' : '#FF3B30', fontSize: 10, fontWeight:'bold'}}>
-                  {item.type === 'good' ? '추천' : '주의'}
-                </Text>
-              </View>
-              <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
-              <Text style={styles.cardDesc} numberOfLines={1}>{item.description || "설명 없음"}</Text>
-            </TouchableOpacity>
-          )}
-        />
+      {/* 바텀 시트 */}
+      <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: panY }] }]}>
+        <View {...panResponder.panHandlers} style={styles.handleContainer}><View style={styles.handle} /></View>
+        <View style={styles.contentContainer}>{renderTabContent()}</View>
+      </Animated.View>
+
+      {/* 하단 탭바 */}
+      <View style={styles.tabBar}>
+        <TabItem icon="map" label="지도" active={activeTab===0} onPress={()=>setActiveTab(0)} />
+        <TabItem icon="sparkles" label="AI" active={activeTab===1} onPress={()=>setActiveTab(1)} />
+        <TabItem icon="person" label="마이" active={activeTab===3} onPress={()=>setActiveTab(3)} />
       </View>
 
       {/* 장소 등록 모달 */}
-      <Modal visible={regModalVisible} transparent animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setRegModalVisible(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.sheet}>
-                <View style={styles.handle} />
-                <Text style={styles.modalTitle}>📍 새로운 장소 인증</Text>
-                <TextInput style={styles.input} placeholder="상호명" value={placeName} onChangeText={setPlaceName} placeholderTextColor="#999" />
-                <TextInput style={[styles.input, {height: 80}]} placeholder="동기들에게 줄 팁 (선택)" value={description} onChangeText={setDescription} multiline />
-                
-                <View style={styles.typeRow}>
-                  <TouchableOpacity style={[styles.typeBtn, recommend === 'good' && styles.typeBtnGood]} onPress={() => setRecommend('good')}>
-                    <Text style={{color: recommend === 'good' ? '#007AFF' : '#666'}}>👍 추천</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.typeBtn, recommend === 'bad' && styles.typeBtnBad]} onPress={() => setRecommend('bad')}>
-                    <Text style={{color: recommend === 'bad' ? '#FF3B30' : '#666'}}>⚠️ 주의</Text>
-                  </TouchableOpacity>
-                </View>
+      <Modal visible={modalVisible} animationType="slide" transparent>
+        <View style={styles.modalBg}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>새로운 장소 등록</Text>
+            <TextInput style={styles.input} placeholder="장소 이름" value={title} onChangeText={setTitle} />
+            <TextInput style={[styles.input, {height: 80}]} placeholder="설명 (맛, 분위기 등)" multiline value={desc} onChangeText={setDesc} />
+            
+            <View style={styles.typeRow}>
+              <TouchableOpacity style={[styles.typeBtn, type==='good' && styles.typeBtnActive]} onPress={()=>setType('good')}>
+                <Text style={{color: type==='good'?'white':'#007AFF'}}>👍 추천해요</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.typeBtn, type==='bad' && styles.typeBtnActiveBad]} onPress={()=>setType('bad')}>
+                <Text style={{color: type==='bad'?'white':'#FF3B30'}}>⚠️ 별로예요</Text>
+              </TouchableOpacity>
+            </View>
 
-                <TouchableOpacity style={styles.saveBtn} onPress={handleRegister}>
-                  <Text style={{color:'white', fontWeight:'bold', fontSize: 16}}>등록 및 10pt 적립</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableWithoutFeedback>
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={()=>setModalVisible(false)}><Text>취소</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.saveBtn} onPress={savePlace}><Text style={{color:'white', fontWeight:'bold'}}>저장하기</Text></TouchableOpacity>
+            </View>
           </View>
-        </TouchableWithoutFeedback>
-      </Modal>
-
-      {/* 상세 정보 모달 */}
-      <Modal visible={detailModalVisible} transparent animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setDetailModalVisible(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.sheet}>
-                <View style={styles.handle} />
-                <View style={{flexDirection:'row', alignItems:'center', marginBottom: 10}}>
-                   <Text style={{color: selectedPlace?.type === 'good' ? '#007AFF' : '#FF3B30', fontWeight:'bold'}}>
-                     {selectedPlace?.type === 'good' ? '👍 추천 장소' : '⚠️ 주의 장소'}
-                   </Text>
-                </View>
-                <Text style={styles.detailTitle}>{selectedPlace?.title}</Text>
-                <Text style={styles.detailDesc}>{selectedPlace?.description || "작성된 후기가 없습니다."}</Text>
-                <TouchableOpacity style={styles.closeBtn} onPress={() => setDetailModalVisible(false)}>
-                  <Text style={{color:'white', fontWeight:'bold'}}>확인</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
+        </View>
       </Modal>
     </View>
   );
 }
 
+// 소형 컴포넌트
+const TabItem = ({ icon, label, active, onPress }) => (
+  <TouchableOpacity style={styles.tabItem} onPress={onPress}>
+    <Ionicons name={icon} size={22} color={active ? '#007AFF' : '#8E8E93'} />
+    <Text style={{fontSize: 10, marginTop: 4, color: active ? '#007AFF' : '#8E8E93', fontWeight: 'bold'}}>{label}</Text>
+  </TouchableOpacity>
+);
+
+const FilterBtn = ({ label, active, onPress }) => (
+  <TouchableOpacity style={[styles.filterBtn, active && styles.filterBtnActive]} onPress={onPress}>
+    <Text style={[styles.filterBtnText, active && {color:'white'}]}>{label}</Text>
+  </TouchableOpacity>
+);
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F2F7' },
-  map: { flex: 1 },
-  searchContainer: { position: 'absolute', top: 60, width: '100%', paddingHorizontal: 20, zIndex: 10 },
-  searchBar: { 
-    backgroundColor: 'white', 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingHorizontal: 15, 
-    height: 50, 
-    borderRadius: 15,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, elevation: 5
-  },
-  searchInput: { flex: 1, fontSize: 15 },
-  myLocationBtn: { 
-    position: 'absolute', bottom: 210, right: 20, 
-    backgroundColor: 'white', width: 50, height: 50, borderRadius: 25, 
-    justifyContent: 'center', alignItems: 'center', shadowColor: "#000", shadowOpacity: 0.2, elevation: 5
-  },
-  listContainer: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(255,255,255,0.95)', borderTopLeftRadius: 25, borderTopRightRadius: 25, paddingVertical: 20, paddingHorizontal: 20, height: 190 },
-  listHeader: { fontSize: 16, fontWeight: 'bold', marginBottom: 15, color: '#1C1C1E' },
-  card: { backgroundColor: 'white', width: 160, height: 100, borderRadius: 18, padding: 15, marginRight: 12, shadowColor: "#000", shadowOpacity: 0.05, elevation: 2, borderWidth: 1, borderColor: '#F2F2F7' },
-  cardTag: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginBottom: 8 },
-  cardTitle: { fontSize: 15, fontWeight: 'bold', color: '#1C1C1E' },
-  cardDesc: { fontSize: 12, color: '#8E8E93', marginTop: 4 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, paddingBottom: 40 },
-  handle: { width: 40, height: 4, backgroundColor: '#E5E5EA', alignSelf: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
-  input: { backgroundColor: '#F2F2F7', borderRadius: 12, padding: 15, marginBottom: 12, fontSize: 15 },
-  typeRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  typeBtn: { flex: 1, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F2F2F7' },
-  typeBtnGood: { backgroundColor: '#E1F0FF', borderWidth: 1, borderColor: '#007AFF' },
-  typeBtnBad: { backgroundColor: '#FFEBEB', borderWidth: 1, borderColor: '#FF3B30' },
-  saveBtn: { backgroundColor: '#007AFF', height: 55, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
-  detailTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 10, color: '#1C1C1E' },
-  detailDesc: { fontSize: 16, color: '#3A3A3C', lineHeight: 22, marginBottom: 30 },
-  closeBtn: { backgroundColor: '#1C1C1E', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' }
+  container: { flex: 1, backgroundColor: 'white' },
+  map: { width: width, height: SCREEN_HEIGHT },
+  topContainer: { position: 'absolute', top: 60, width: '100%', paddingHorizontal: 20, zIndex: 10 },
+  searchBar: { backgroundColor: 'white', height: 50, borderRadius: 25, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, elevation: 5, shadowOpacity: 0.1, marginBottom: 10 },
+  searchInput: { flex: 1, marginLeft: 10 },
+  filterRow: { flexDirection: 'row' },
+  filterBtn: { backgroundColor: 'white', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, marginRight: 8, elevation: 3, shadowOpacity: 0.05 },
+  filterBtnActive: { backgroundColor: '#007AFF' },
+  filterBtnText: { fontSize: 12, fontWeight: '600', color: '#555' },
+  myLocationBtn: { position: 'absolute', top: 180, right: 20, backgroundColor: 'white', width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 5, zIndex: 10 },
+  bottomSheet: { position: 'absolute', top: 0, left: 0, right: 0, height: SCREEN_HEIGHT, backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, elevation: 20 },
+  handleContainer: { width: '100%', alignItems: 'center', paddingVertical: 15 },
+  handle: { width: 40, height: 5, backgroundColor: '#EEE', borderRadius: 3 },
+  contentContainer: { flex: 1, paddingHorizontal: 25 },
+  tabInner: { flex: 1 },
+  tabTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
+  tabBar: { position: 'absolute', bottom: 0, flexDirection: 'row', width: '100%', height: 90, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#F2F2F7', paddingBottom: 25, zIndex: 100 },
+  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  feedCard: { padding: 15, backgroundColor: '#F8F9FA', borderRadius: 15, marginBottom: 12 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
+  feedUser: { fontWeight: 'bold' },
+  feedTag: { fontSize: 10, fontWeight: 'bold' },
+  feedPlace: { fontSize: 16, fontWeight: 'bold' },
+  feedDesc: { fontSize: 13, color: '#666' },
+  profileCard: { backgroundColor: '#F8F9FA', borderRadius: 20, padding: 25, alignItems: 'center', marginBottom: 25 },
+  levelBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginBottom: 8 },
+  levelText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
+  userEmail: { fontSize: 16, fontWeight: 'bold' },
+  statsRow: { flexDirection: 'row', marginTop: 20 },
+  statBox: { flex: 1, alignItems: 'center' },
+  statVal: { fontSize: 18, fontWeight: 'bold', color: '#007AFF' },
+  statLabel: { fontSize: 11, color: '#888' },
+  divider: { width: 1, height: 30, backgroundColor: '#EEE' },
+  placeItem: { flexDirection: 'row', backgroundColor: '#F8F9FA', padding: 15, borderRadius: 12, marginBottom: 10, alignItems: 'center' },
+  placeTitle: { fontWeight: 'bold' },
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  modalContent: { backgroundColor: 'white', borderRadius: 20, padding: 25 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
+  input: { backgroundColor: '#F2F2F7', padding: 15, borderRadius: 12, marginBottom: 15 },
+  typeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+  typeBtn: { flex: 0.48, padding: 12, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#EEE' },
+  typeBtnActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
+  typeBtnActiveBad: { backgroundColor: '#FF3B30', borderColor: '#FF3B30' },
+  modalBtns: { flexDirection: 'row', justifyContent: 'space-between' },
+  cancelBtn: { flex: 0.45, padding: 15, alignItems: 'center' },
+  saveBtn: { flex: 0.45, backgroundColor: '#007AFF', padding: 15, borderRadius: 12, alignItems: 'center' }
 });
