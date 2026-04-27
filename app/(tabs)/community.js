@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import CommunityTab from '../../components/home/CommunityTab'; // 기존 컴포넌트 재사용
+import CommunityTab from '../../components/home/CommunityTab';
 
 export default function CommunityScreen() {
   return (
@@ -13,8 +13,6 @@ export default function CommunityScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
-    paddingTop: 60,
-    paddingHorizontal: 20,
+    backgroundColor: '#F2F2F7',
   },
 });
