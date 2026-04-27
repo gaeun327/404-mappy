@@ -8,9 +8,15 @@ import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/fire
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-const TEST_LEVEL = () => ({ name: "마스터 🔥", color: "#FFD700" });
+const getLevel = (count) => {
+  if (count >= 50) return { name: "전설의 탐험가 👑", color: "#8B5CF6", next: null, max: 50 };
+  if (count >= 30) return { name: "지역 마스터 🥇",   color: "#FFD700", next: 50,   max: 50 };
+  if (count >= 15) return { name: "동네 보안관 🥉",   color: "#FF6B35", next: 30,   max: 30 };
+  if (count >= 7)  return { name: "로컬 탐험가 🔍",   color: "#007AFF", next: 15,   max: 15 };
+  if (count >= 3)  return { name: "동네 입문자 🗺️",   color: "#00B4D8", next: 7,    max: 7  };
+  return           { name: "새싹 탐험가 🌱",          color: "#34C759", next: 3,    max: 3  };
+};
 
-// FeedTab khh 게시글 더미 (실제 연동 전 발표용)
 const DEMO_POSTS = [
   {
     id: 'demo_1',
@@ -25,16 +31,10 @@ const DEMO_POSTS = [
   },
 ];
 
-const CATEGORY_COLOR = {
-  '음식점': { color: '#FF6B35', bg: '#FFF3EE' },
-  '카페':   { color: '#8B5CF6', bg: '#F3EEFF' },
-  '공원':   { color: '#10B981', bg: '#EDFAF4' },
-};
-
 export default function MyPage() {
   const router = useRouter();
   const [myPlaces, setMyPlaces] = useState([]);
-  const [loading, setLoading]   = useState(true);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('posts');
 
   useEffect(() => {
@@ -70,10 +70,13 @@ export default function MyPage() {
     ]);
   };
 
-  const level = TEST_LEVEL();
+  const level = getLevel(myPlaces.length);
+  const progressPercent = level.next ? (myPlaces.length / level.next) * 100 : 100;
+  const progressLabel = level.next
+    ? `다음 레벨까지 ${level.next - myPlaces.length}개`
+    : '최고 레벨 달성! 🎉';
   const totalLikes = DEMO_POSTS.reduce((s, p) => s + p.likes, 0);
 
-  // 실제 DB 장소 + 데모 게시글 합산
   const allPosts = [
     ...DEMO_POSTS,
     ...myPlaces.map((p) => ({
@@ -113,6 +116,20 @@ export default function MyPage() {
             <Text style={styles.levelText}>{level.name}</Text>
           </View>
           <Text style={styles.userEmail}>{auth.currentUser?.email}</Text>
+
+          {/* 레벨 진행도 바 */}
+          <View style={styles.progressWrap}>
+            <View style={styles.progressLabelRow}>
+              <Text style={styles.progressLabel}>{progressLabel}</Text>
+              <Text style={styles.progressCount}>{myPlaces.length}개 등록</Text>
+            </View>
+            <View style={styles.progressBg}>
+              <View style={[styles.progressFill, {
+                width: `${progressPercent}%`,
+                backgroundColor: level.color,
+              }]} />
+            </View>
+          </View>
 
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
@@ -172,15 +189,11 @@ export default function MyPage() {
                         <Ionicons name="thumbs-up" size={11} color="#007AFF" />
                         <Text style={styles.postTypeText}>{post.type}</Text>
                       </View>
-                      {post.location ? (
-                        <Text style={styles.postLocation}>📍 {post.location}</Text>
-                      ) : null}
+                      {post.location ? <Text style={styles.postLocation}>📍 {post.location}</Text> : null}
                       {post.time ? <Text style={styles.postTime}>{post.time}</Text> : null}
                     </View>
                     <Text style={styles.postTitle}>{post.title}</Text>
-                    {post.desc ? (
-                      <Text style={styles.postDesc} numberOfLines={2}>{post.desc}</Text>
-                    ) : null}
+                    {post.desc ? <Text style={styles.postDesc} numberOfLines={2}>{post.desc}</Text> : null}
                     <View style={styles.postActionRow}>
                       {post.likes > 0 && (
                         <View style={styles.postStat}>
@@ -195,10 +208,7 @@ export default function MyPage() {
                         </View>
                       )}
                       {!post.isDemo && (
-                        <TouchableOpacity
-                          onPress={() => handleDelete(post.id)}
-                          style={styles.deleteBtn}
-                        >
+                        <TouchableOpacity onPress={() => handleDelete(post.id)} style={styles.deleteBtn}>
                           <Ionicons name="trash-outline" size={15} color="#FF3B30" />
                           <Text style={styles.deleteBtnText}>삭제</Text>
                         </TouchableOpacity>
@@ -230,8 +240,6 @@ export default function MyPage() {
 const styles = StyleSheet.create({
   safeArea:      { flex: 1, backgroundColor: '#F2F2F7' },
   scrollContent: { paddingBottom: 40 },
-
-  // Header
   header: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', paddingHorizontal: 20,
@@ -242,8 +250,6 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#1C1C1E' },
   logoutBtn:   { paddingHorizontal: 4 },
   logoutText:  { color: '#FF3B30', fontSize: 14, fontWeight: '600' },
-
-  // Profile Card
   profileCard: {
     backgroundColor: '#fff', margin: 16, borderRadius: 20,
     padding: 24, alignItems: 'center',
@@ -256,19 +262,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3EEFF',
     alignItems: 'center', justifyContent: 'center',
   },
-  levelBadge: {
-    paddingHorizontal: 14, paddingVertical: 6,
-    borderRadius: 12, marginBottom: 8,
-  },
-  levelText:  { color: '#fff', fontWeight: '800', fontSize: 13 },
-  userEmail:  { fontSize: 15, fontWeight: '600', color: '#1C1C1E', marginBottom: 20 },
-  statsRow:   { flexDirection: 'row', width: '100%' },
-  statBox:    { flex: 1, alignItems: 'center', gap: 4 },
-  statVal:    { fontSize: 20, fontWeight: '800', color: '#007AFF' },
-  statLabel:  { fontSize: 11, color: '#8E8E93' },
-  divider:    { width: 1, height: 36, backgroundColor: '#F2F2F7', alignSelf: 'center' },
-
-  // Tabs
+  levelBadge:    { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 12, marginBottom: 8 },
+  levelText:     { color: '#fff', fontWeight: '800', fontSize: 13 },
+  userEmail:     { fontSize: 15, fontWeight: '600', color: '#1C1C1E', marginBottom: 16 },
+  progressWrap:  { width: '100%', marginBottom: 20 },
+  progressLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  progressLabel: { fontSize: 12, color: '#8E8E93' },
+  progressCount: { fontSize: 12, color: '#8E8E93' },
+  progressBg:    { height: 6, backgroundColor: '#F2F2F7', borderRadius: 3, overflow: 'hidden' },
+  progressFill:  { height: '100%', borderRadius: 3 },
+  statsRow:      { flexDirection: 'row', width: '100%' },
+  statBox:       { flex: 1, alignItems: 'center', gap: 4 },
+  statVal:       { fontSize: 20, fontWeight: '800', color: '#007AFF' },
+  statLabel:     { fontSize: 11, color: '#8E8E93' },
+  divider:       { width: 1, height: 36, backgroundColor: '#F2F2F7', alignSelf: 'center' },
   tabRow: {
     flexDirection: 'row', marginHorizontal: 16,
     backgroundColor: '#fff', borderRadius: 14,
@@ -281,36 +288,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center', gap: 5,
     paddingVertical: 9, borderRadius: 10,
   },
-  tabBtnActive: { backgroundColor: '#1C1C1E' },
-  tabBtnText:   { fontSize: 12, fontWeight: '600', color: '#8E8E93' },
-
-  // Section
-  section: { paddingHorizontal: 16 },
-
-  // Post card
+  tabBtnActive:  { backgroundColor: '#1C1C1E' },
+  tabBtnText:    { fontSize: 12, fontWeight: '600', color: '#8E8E93' },
+  section:       { paddingHorizontal: 16 },
   postCard: {
     flexDirection: 'row', backgroundColor: '#fff',
     borderRadius: 16, marginBottom: 10, overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
   },
-  postAccent:   { width: 4, backgroundColor: '#007AFF' },
-  postBody:     { flex: 1, padding: 14 },
-  postTopRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  postTypeBadge:{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#EAF3FF', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8 },
-  postTypeText: { fontSize: 11, fontWeight: '700', color: '#007AFF' },
-  postLocation: { fontSize: 11, color: '#8E8E93' },
-  postTime:     { fontSize: 11, color: '#AEAEB2', marginLeft: 'auto' },
-  postTitle:    { fontSize: 16, fontWeight: '700', color: '#1C1C1E', marginBottom: 4 },
-  postDesc:     { fontSize: 13, color: '#3A3A3C', lineHeight: 19, marginBottom: 10 },
-  postActionRow:{ flexDirection: 'row', gap: 12, alignItems: 'center' },
-  postStat:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  postStatText: { fontSize: 12, color: '#8E8E93', fontWeight: '500' },
-  deleteBtn:    { flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 'auto' },
-  deleteBtnText:{ fontSize: 12, color: '#FF3B30', fontWeight: '600' },
-
-  // Empty
-  emptyBox:  { alignItems: 'center', paddingVertical: 50, gap: 8 },
-  emptyText: { fontSize: 15, fontWeight: '700', color: '#8E8E93', marginTop: 8 },
-  emptySub:  { fontSize: 13, color: '#AEAEB2', textAlign: 'center' },
+  postAccent:    { width: 4, backgroundColor: '#007AFF' },
+  postBody:      { flex: 1, padding: 14 },
+  postTopRow:    { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  postTypeBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#EAF3FF', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8 },
+  postTypeText:  { fontSize: 11, fontWeight: '700', color: '#007AFF' },
+  postLocation:  { fontSize: 11, color: '#8E8E93' },
+  postTime:      { fontSize: 11, color: '#AEAEB2', marginLeft: 'auto' },
+  postTitle:     { fontSize: 16, fontWeight: '700', color: '#1C1C1E', marginBottom: 4 },
+  postDesc:      { fontSize: 13, color: '#3A3A3C', lineHeight: 19, marginBottom: 10 },
+  postActionRow: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  postStat:      { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  postStatText:  { fontSize: 12, color: '#8E8E93', fontWeight: '500' },
+  deleteBtn:     { flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 'auto' },
+  deleteBtnText: { fontSize: 12, color: '#FF3B30', fontWeight: '600' },
+  emptyBox:      { alignItems: 'center', paddingVertical: 50, gap: 8 },
+  emptyText:     { fontSize: 15, fontWeight: '700', color: '#8E8E93', marginTop: 8 },
+  emptySub:      { fontSize: 13, color: '#AEAEB2', textAlign: 'center' },
 });

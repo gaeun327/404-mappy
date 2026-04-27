@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { useState, useEffect } from 'react';
-import SplashScreen from './splash'; 
+import SplashScreen from './splash';
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
@@ -14,9 +14,10 @@ export default function RootLayout() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />       {/* 로그인 화면 */}
-      <Stack.Screen name="signup" />      {/* 회원가입 화면 */}
-      <Stack.Screen name="(tabs)" />      {/* 탭 구조로 이동 (여기서 home 등이 관리됨) */}
+      <Stack.Screen name="index" />
+      <Stack.Screen name="signup" />
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="detail" />
     </Stack>
   );
 }
