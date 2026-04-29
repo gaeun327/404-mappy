@@ -10,11 +10,11 @@ import { ref, getDownloadURL } from 'firebase/storage';
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 export default function DetailScreen() {
   const router = useRouter();
-  const { id, title, description, type, user, address, detailAddress, imagePaths, tags } = useLocalSearchParams();
+  const { id, title, description, type, user, imagePaths, tags } = useLocalSearchParams();
 
   const [imageUrls, setImageUrls] = useState([]);
   const [imgLoading, setImgLoading] = useState(true);
@@ -100,110 +100,108 @@ export default function DetailScreen() {
 
   const fallbackImage = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800';
   const displayImages = imageUrls.length > 0 ? imageUrls : [fallbackImage];
-  const fullAddress = [
-    address && address !== 'undefined' ? address : null,
-    detailAddress && detailAddress !== 'undefined' && detailAddress !== '' ? detailAddress : null,
-  ].filter(Boolean).join(' ');
 
   return (
     <View style={styles.container}>
+      <ScrollView showsVerticalScrollIndicator={false} bounces={true}>
 
-      {/* ✅ 사진 고정 영역 */}
-      <View style={styles.heroContainer}>
-        {imgLoading ? (
-          <View style={styles.heroLoading}>
-            <ActivityIndicator color="white" size="large" />
-          </View>
-        ) : (
-          <FlatList
-            data={displayImages}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(_, i) => i.toString()}
-            onMomentumScrollEnd={(e) => {
-              const index = Math.round(e.nativeEvent.contentOffset.x / width);
-              setCurrentIndex(index);
-            }}
-            renderItem={({ item }) => (
-              <Image source={item} style={styles.heroImage} contentFit="cover" />
-            )}
-          />
-        )}
-
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={22} color="#1C1C1E" />
-        </TouchableOpacity>
-
-        <View style={styles.topRight}>
-          <TouchableOpacity style={styles.iconBtn} onPress={toggleBookmark} disabled={bookmarkLoading}>
-            {bookmarkLoading
-              ? <ActivityIndicator size="small" color="#007AFF" />
-              : <Ionicons
-                  name={bookmarked ? 'bookmark' : 'bookmark-outline'}
-                  size={22}
-                  color={bookmarked ? '#007AFF' : '#1C1C1E'}
-                />
-            }
-          </TouchableOpacity>
-          {isMyPost && (
-            <TouchableOpacity style={styles.iconBtn} onPress={() => setMenuVisible(true)}>
-              <Ionicons name="ellipsis-vertical" size={22} color="#1C1C1E" />
-            </TouchableOpacity>
+        {/* 히어로 사진 영역 */}
+        <View style={styles.heroContainer}>
+          {imgLoading ? (
+            <View style={styles.heroLoading}>
+              <ActivityIndicator color="white" size="large" />
+            </View>
+          ) : (
+            <FlatList
+              data={displayImages}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(_, i) => i.toString()}
+              onMomentumScrollEnd={(e) => {
+                const index = Math.round(e.nativeEvent.contentOffset.x / width);
+                setCurrentIndex(index);
+              }}
+              renderItem={({ item }) => (
+                <Image source={item} style={styles.heroImage} contentFit="cover" />
+              )}
+            />
           )}
+
+          {/* 상단 그라데이션 느낌 - 버튼 가독성용 */}
+          <View style={styles.topGradient} />
+
+          {/* 하단 그라데이션 - 텍스트 오버레이용 */}
+          <View style={styles.bottomGradient} />
+
+          {/* 뒤로가기 */}
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Ionicons name="chevron-back" size={22} color="white" />
+          </TouchableOpacity>
+
+          {/* 우측 버튼들 */}
+          <View style={styles.topRight}>
+            <TouchableOpacity style={styles.iconBtn} onPress={toggleBookmark} disabled={bookmarkLoading}>
+              {bookmarkLoading
+                ? <ActivityIndicator size="small" color="white" />
+                : <Ionicons
+                    name={bookmarked ? 'bookmark' : 'bookmark-outline'}
+                    size={22}
+                    color={bookmarked ? '#FFD60A' : 'white'}
+                  />
+              }
+            </TouchableOpacity>
+            {isMyPost && (
+              <TouchableOpacity style={styles.iconBtn} onPress={() => setMenuVisible(true)}>
+                <Ionicons name="ellipsis-vertical" size={22} color="white" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* 사진 카운터 */}
+          {displayImages.length > 1 && (
+            <View style={styles.counter}>
+              <Text style={styles.counterTxt}>{currentIndex + 1} / {displayImages.length}</Text>
+            </View>
+          )}
+
+          {/* 하단 인디케이터 */}
+          {displayImages.length > 1 && (
+            <View style={styles.dotRow}>
+              {displayImages.map((_, i) => (
+                <View key={i} style={[styles.dot, i === currentIndex && styles.dotActive]} />
+              ))}
+            </View>
+          )}
+
+          {/* 히어로 하단 텍스트 오버레이 */}
+          <View style={styles.heroBottom}>
+            <View style={styles.badgeRow}>
+              <View style={[styles.typeBadge, { backgroundColor: isGood ? '#007AFF' : '#FF3B30' }]}>
+                <Text style={styles.typeBadgeTxt}>{isGood ? '👍 추천' : '👎 비추천'}</Text>
+              </View>
+              {parsedTags.slice(0, 2).map((tag, i) => (
+                <View key={i} style={styles.tagBadge}>
+                  <Text style={styles.tagBadgeTxt}>{tag}</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={styles.heroTitle} numberOfLines={2}>{title}</Text>
+            <View style={styles.heroUserRow}>
+              <View style={styles.heroAvatar}>
+                <Text style={styles.heroAvatarTxt}>
+                  {user && user !== 'undefined' ? user.charAt(0).toUpperCase() : '?'}
+                </Text>
+              </View>
+              <Text style={styles.heroUserTxt}>{user && user !== 'undefined' ? user : '익명'}님 · {new Date().toLocaleDateString('ko-KR')}</Text>
+            </View>
+          </View>
         </View>
 
-        {displayImages.length > 1 && (
-          <View style={styles.counter}>
-            <Text style={styles.counterTxt}>{currentIndex + 1} / {displayImages.length}</Text>
-          </View>
-        )}
-
-        {displayImages.length > 1 && (
-          <View style={styles.dotRow}>
-            {displayImages.map((_, i) => (
-              <View key={i} style={[styles.dot, i === currentIndex && styles.dotActive]} />
-            ))}
-          </View>
-        )}
-      </View>
-
-      {/* ✅ 콘텐츠만 스크롤 */}
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        bounces={true}
-        contentContainerStyle={styles.contentContainer}
-      >
+        {/* 콘텐츠 영역 */}
         <View style={styles.contentBox}>
 
-          <View style={styles.badgeRow}>
-            <View style={[styles.typeBadge, { backgroundColor: isGood ? '#007AFF' : '#FF3B30' }]}>
-              <Text style={styles.typeBadgeTxt}>{isGood ? '👍 추천' : '👎 비추천'}</Text>
-            </View>
-            {parsedTags.slice(0, 2).map((tag, i) => (
-              <View key={i} style={styles.tagBadgeSmall}>
-                <Text style={styles.tagBadgeSmallTxt}>{tag}</Text>
-              </View>
-            ))}
-          </View>
-
-          <Text style={styles.titleTxt}>{title}</Text>
-
-          <View style={styles.userRow}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarTxt}>
-                {user && user !== 'undefined' ? user.charAt(0).toUpperCase() : '?'}
-              </Text>
-            </View>
-            <View>
-              <Text style={styles.userName}>{user && user !== 'undefined' ? user : '익명'}님의 기록</Text>
-              <Text style={styles.userSub}>{new Date().toLocaleDateString('ko-KR')} 등록</Text>
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
+          {/* 한줄 평 */}
           {description ? (
             <View style={styles.reviewSection}>
               <Text style={styles.reviewQuote}>"</Text>
@@ -212,6 +210,7 @@ export default function DetailScreen() {
             </View>
           ) : null}
 
+          {/* 태그 */}
           {parsedTags.length > 0 && (
             <View style={styles.tagRow}>
               {parsedTags.map((tag, i) => (
@@ -222,19 +221,16 @@ export default function DetailScreen() {
             </View>
           )}
 
+          {/* 구분선 */}
           <View style={styles.divider} />
 
-          {fullAddress ? (
-            <View style={styles.addressCard}>
-              <Ionicons name="location-outline" size={18} color="#007AFF" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.addressLabel}>위치</Text>
-                <Text style={styles.addressVal}>{fullAddress}</Text>
-              </View>
-            </View>
-          ) : null}
-
+          {/* 정보 카드 2열 */}
           <View style={styles.infoRow}>
+            <View style={styles.infoCard}>
+              <Ionicons name="location-outline" size={18} color="#007AFF" style={{ marginBottom: 6 }} />
+              <Text style={styles.infoLabel}>위치</Text>
+              <Text style={styles.infoVal}>지도에서 확인</Text>
+            </View>
             <View style={styles.infoCard}>
               <Ionicons name={isGood ? 'thumbs-up-outline' : 'thumbs-down-outline'} size={18} color={isGood ? '#007AFF' : '#FF3B30'} style={{ marginBottom: 6 }} />
               <Text style={styles.infoLabel}>유형</Text>
@@ -247,6 +243,7 @@ export default function DetailScreen() {
             </View>
           </View>
 
+          {/* 북마크 버튼 */}
           <TouchableOpacity
             style={[styles.bookmarkBtn, bookmarked && styles.bookmarkBtnOn]}
             onPress={toggleBookmark}
@@ -256,7 +253,11 @@ export default function DetailScreen() {
               <ActivityIndicator color={bookmarked ? 'white' : '#007AFF'} />
             ) : (
               <>
-                <Ionicons name={bookmarked ? 'bookmark' : 'bookmark-outline'} size={20} color={bookmarked ? 'white' : '#007AFF'} />
+                <Ionicons
+                  name={bookmarked ? 'bookmark' : 'bookmark-outline'}
+                  size={20}
+                  color={bookmarked ? 'white' : '#007AFF'}
+                />
                 <Text style={[styles.bookmarkBtnTxt, bookmarked && { color: 'white' }]}>
                   {bookmarked ? '저장됨' : '저장하기'}
                 </Text>
@@ -267,6 +268,7 @@ export default function DetailScreen() {
         </View>
       </ScrollView>
 
+      {/* 수정/삭제 메뉴 모달 */}
       <Modal visible={menuVisible} transparent animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} onPress={() => setMenuVisible(false)}>
           <View style={styles.menuSheet}>
@@ -290,67 +292,60 @@ export default function DetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'white' },
 
-  heroContainer: { width, height: height * 0.45, position: 'relative' },
-  heroLoading: { width, height: height * 0.45, backgroundColor: '#f2f2f2', justifyContent: 'center', alignItems: 'center' },
-  heroImage: { width, height: height * 0.45 },
+  heroContainer: { width, height: 420, position: 'relative' },
+  heroLoading: { width, height: 420, backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center' },
+  heroImage: { width, height: 420 },
+
+  topGradient: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: 120,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  bottomGradient: {
+    position: 'absolute', bottom: 0, left: 0, right: 0, height: 200,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
 
   backBtn: {
     position: 'absolute', top: 52, left: 16,
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.92)',
     justifyContent: 'center', alignItems: 'center',
   },
-  topRight: { position: 'absolute', top: 52, right: 16, flexDirection: 'row', gap: 8 },
-  iconBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    justifyContent: 'center', alignItems: 'center',
-  },
+  topRight: { position: 'absolute', top: 52, right: 16, flexDirection: 'row', gap: 4 },
+  iconBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
 
   counter: {
-    position: 'absolute', top: 16, left: width / 2 - 24,
+    position: 'absolute', top: 58, alignSelf: 'center', left: width / 2 - 24,
     backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20,
   },
   counterTxt: { color: 'white', fontSize: 12, fontWeight: '600' },
 
-  dotRow: { position: 'absolute', bottom: 16, flexDirection: 'row', left: 0, right: 0, justifyContent: 'center', gap: 5 },
-  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.5)' },
+  dotRow: { position: 'absolute', bottom: 96, flexDirection: 'row', alignSelf: 'center', gap: 5, left: 0, right: 0, justifyContent: 'center' },
+  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.45)' },
   dotActive: { backgroundColor: 'white', width: 16 },
 
-  scrollView: { flex: 1 },
-  contentContainer: { paddingBottom: 40 },
-  contentBox: { backgroundColor: 'white', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24 },
-
+  heroBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20, paddingBottom: 28 },
   badgeRow: { flexDirection: 'row', gap: 8, marginBottom: 10, flexWrap: 'wrap' },
   typeBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
   typeBadgeTxt: { color: 'white', fontSize: 12, fontWeight: '700' },
-  tagBadgeSmall: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, backgroundColor: '#F2F2F7' },
-  tagBadgeSmallTxt: { fontSize: 12, color: '#3A3A3C', fontWeight: '500' },
+  tagBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.4)' },
+  tagBadgeTxt: { color: 'white', fontSize: 12 },
+  heroTitle: { fontSize: 28, fontWeight: '800', color: 'white', marginBottom: 10, lineHeight: 34 },
+  heroUserRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  heroAvatar: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.25)', justifyContent: 'center', alignItems: 'center' },
+  heroAvatarTxt: { fontSize: 11, fontWeight: '700', color: 'white' },
+  heroUserTxt: { fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: '500' },
 
-  titleTxt: { fontSize: 26, fontWeight: '800', color: '#1C1C1E', marginBottom: 16 },
+  contentBox: { backgroundColor: 'white', borderTopLeftRadius: 28, borderTopRightRadius: 28, marginTop: -28, padding: 24, paddingBottom: 48 },
 
-  userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
-  avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#E6F1FB', justifyContent: 'center', alignItems: 'center' },
-  avatarTxt: { fontSize: 15, fontWeight: '700', color: '#185FA5' },
-  userName: { fontSize: 14, fontWeight: '700', color: '#1C1C1E' },
-  userSub: { fontSize: 12, color: '#8E8E93', marginTop: 2 },
-
-  divider: { height: 1, backgroundColor: '#F2F2F7', marginBottom: 20 },
-
-  reviewSection: { marginBottom: 20, paddingHorizontal: 4 },
+  reviewSection: { marginBottom: 24, paddingHorizontal: 4 },
   reviewQuote: { fontSize: 36, color: '#E5E5EA', fontWeight: '800', lineHeight: 36 },
   reviewTxt: { fontSize: 17, color: '#1C1C1E', lineHeight: 28, fontWeight: '500', paddingHorizontal: 8, marginVertical: -4 },
 
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
   tagChip: { backgroundColor: '#F2F2F7', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   tagChipTxt: { fontSize: 13, color: '#3A3A3C', fontWeight: '600' },
 
-  addressCard: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-    backgroundColor: '#F8F8F8', borderRadius: 16, padding: 16, marginBottom: 12,
-  },
-  addressLabel: { fontSize: 11, color: '#8E8E93', marginBottom: 4 },
-  addressVal: { fontSize: 14, fontWeight: '600', color: '#1C1C1E', lineHeight: 20 },
+  divider: { height: 1, backgroundColor: '#F2F2F7', marginBottom: 24 },
 
   infoRow: { flexDirection: 'row', gap: 10, marginBottom: 28 },
   infoCard: { flex: 1, backgroundColor: '#F8F8F8', borderRadius: 16, padding: 14 },
