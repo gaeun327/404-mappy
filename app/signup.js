@@ -9,6 +9,13 @@ import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { collection, query, where, getDocs, setDoc, doc } from 'firebase/firestore';
 import { useRouter } from 'expo-router';
 
+const generateInviteCode = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 O/0/I/1 제외
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+};
+
 export default function SignUpScreen() {
   const router = useRouter();
 
@@ -72,6 +79,8 @@ export default function SignUpScreen() {
         createdAt: new Date(),
         points: 0,
         level: "새싹 탐험가 🌱",
+        inviteCode: generateInviteCode(),
+        friends: [],
       });
       Alert.alert("환영합니다!", `${nickname}님, 탐험을 시작해보세요!`);
       router.replace('/home');

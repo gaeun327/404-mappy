@@ -11,7 +11,23 @@ import { db, auth, storage } from '../firebaseConfig';
 import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
-const PRESET_TAGS = ['#뷰맛집', '#데이트', '#혼자', '#친구들과', '#조용한', '#핫플', '#가성비', '#야간'];
+const CATEGORIES = [
+  { id: 'food',     label: '🍽️ 음식점' },
+  { id: 'cafe',     label: '☕ 카페·디저트' },
+  { id: 'nature',   label: '🌿 자연·공원' },
+  { id: 'culture',  label: '🎨 문화·전시' },
+  { id: 'popup',    label: '🎪 팝업·이벤트' },
+  { id: 'shop',     label: '🛍️ 쇼핑' },
+  { id: 'hospital', label: '🏥 병원·약국' },
+  { id: 'beauty',   label: '💇 미용' },
+  { id: 'parking',  label: '🚗 주차장' },
+  { id: 'stay',     label: '🏨 숙소' },
+  { id: 'fitness',  label: '🏋️ 운동·헬스' },
+  { id: 'study',    label: '📚 카공·스터디' },
+  { id: 'play',     label: '🎮 오락·취미' },
+  { id: 'etc',      label: '📍 기타' },
+];
+const PRESET_THEMES = ['🌸 벚꽃', '🍂 단풍', '❄️ 눈', '🌙 야경', '💑 데이트', '🐶 애견', '👤 혼자', '👯 친구들과', '📸 뷰맛집', '💰 가성비'];
 const MAX_IMAGES = 10;
 const { width } = Dimensions.get('window');
 const GOOGLE_MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -26,6 +42,7 @@ export default function AddPlaceScreen() {
   const [address, setAddress] = useState('');
   const [detailAddress, setDetailAddress] = useState('');
   const [addressLoading, setAddressLoading] = useState(true);
+  const [category, setCategory] = useState('');
   const [selectedTags, setSelectedTags] = useState([]);
   const [customTag, setCustomTag] = useState('');
   const [selectedImages, setSelectedImages] = useState([]);
@@ -144,6 +161,7 @@ export default function AddPlaceScreen() {
         title: pinTitle,
         description: pinDesc,
         type: pinType,
+        category: category,
         latitude: parseFloat(latitude),
         longitude: parseFloat(longitude),
         address: address,
@@ -273,9 +291,22 @@ export default function AddPlaceScreen() {
           value={pinDesc} onChangeText={setPinDesc} multiline
         />
 
-        <Text style={styles.sectionLabel}>해시태그</Text>
+        <Text style={styles.sectionLabel}>카테고리 <Text style={styles.required}>*</Text></Text>
         <View style={styles.tagWrap}>
-          {PRESET_TAGS.map(tag => (
+          {CATEGORIES.map(cat => (
+            <TouchableOpacity
+              key={cat.id}
+              style={[styles.tagChip, category === cat.id && styles.tagChipOn]}
+              onPress={() => setCategory(cat.id)}
+            >
+              <Text style={[styles.tagChipTxt, category === cat.id && { color: 'white' }]}>{cat.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.sectionLabel}>테마 태그</Text>
+        <View style={styles.tagWrap}>
+          {PRESET_THEMES.map(tag => (
             <TouchableOpacity
               key={tag}
               style={[styles.tagChip, selectedTags.includes(tag) && styles.tagChipOn]}
@@ -289,7 +320,7 @@ export default function AddPlaceScreen() {
         <View style={styles.customRow}>
           <TextInput
             style={[styles.input, { flex: 1, marginBottom: 0 }]}
-            placeholder="직접 입력 (예: #반려동물)"
+            placeholder="직접 입력 (예: 🌊 바다뷰)"
             value={customTag} onChangeText={setCustomTag}
             onSubmitEditing={addCustomTag} returnKeyType="done"
           />
@@ -298,9 +329,9 @@ export default function AddPlaceScreen() {
           </TouchableOpacity>
         </View>
 
-        {selectedTags.filter(t => !PRESET_TAGS.includes(t)).length > 0 && (
+        {selectedTags.filter(t => !PRESET_THEMES.includes(t)).length > 0 && (
           <View style={[styles.tagWrap, { marginTop: 10 }]}>
-            {selectedTags.filter(t => !PRESET_TAGS.includes(t)).map(tag => (
+            {selectedTags.filter(t => !PRESET_THEMES.includes(t)).map(tag => (
               <TouchableOpacity key={tag} style={styles.tagChipOn} onPress={() => toggleTag(tag)}>
                 <Text style={[styles.tagChipTxt, { color: 'white' }]}>{tag} ✕</Text>
               </TouchableOpacity>

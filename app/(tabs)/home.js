@@ -17,8 +17,10 @@ export default function HomeScreen() {
   const router = useRouter();
   const mapRef = useRef(null);
   const [pins, setPins] = useState([]);
+  const [allPins, setAllPins] = useState([]);
   const [loading, setLoading] = useState(false);
   const [nearbyCount, setNearbyCount] = useState(0);
+  const [selectedCategory, setSelectedCategory] = useState('전체');
 
   useFocusEffect(
     useCallback(() => {
@@ -30,8 +32,10 @@ export default function HomeScreen() {
     try {
       const q = query(collection(db, 'places'), orderBy('createdAt', 'desc'));
       const snap = await getDocs(q);
-      setPins(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setNearbyCount(snap.docs.length);
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setAllPins(data);
+      setPins(data);
+      setNearbyCount(data.length);
     } catch (e) { console.log('핀 불러오기 오류:', e); }
   };
 
@@ -87,6 +91,7 @@ export default function HomeScreen() {
         detailAddress: pin.detailAddress ?? '',
         imagePaths: encodeURIComponent(JSON.stringify(pin.imagePaths ?? [])),
         tags: JSON.stringify(pin.tags ?? []),
+        category: pin.category ?? '',
       }
     });
   };
@@ -138,8 +143,34 @@ export default function HomeScreen() {
           )}
         />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-          {['🏠 전체', '🍔 맛집', '☕ 카페', '🚗 주차장'].map((f, i) => (
-            <TouchableOpacity key={i} style={styles.filterBtn}><Text>{f}</Text></TouchableOpacity>
+          {[
+            { label: '전체',      id: '전체' },
+            { label: '🍽️ 음식점', id: 'food' },
+            { label: '☕ 카페',   id: 'cafe' },
+            { label: '🌿 자연',   id: 'nature' },
+            { label: '🎨 문화',   id: 'culture' },
+            { label: '🎪 팝업',   id: 'popup' },
+            { label: '🛍️ 쇼핑',   id: 'shop' },
+            { label: '🏥 병원·약국', id: 'hospital' },
+            { label: '💇 미용',     id: 'beauty' },
+            { label: '🚗 주차장',   id: 'parking' },
+            { label: '🏨 숙소',     id: 'stay' },
+            { label: '🏋️ 운동·헬스', id: 'fitness' },
+            { label: '📚 카공·스터디', id: 'study' },
+            { label: '🎮 오락·취미', id: 'play' },
+            { label: '📍 기타',     id: 'etc' },
+          ].map((f) => (
+            <TouchableOpacity
+              key={f.id}
+              style={[styles.filterBtn, selectedCategory === f.id && styles.filterBtnActive]}
+              onPress={() => {
+                setSelectedCategory(f.id);
+                setPins(f.id === '전체' ? allPins : allPins.filter(p => p.category === f.id));
+                setNearbyCount(f.id === '전체' ? allPins.length : allPins.filter(p => p.category === f.id).length);
+              }}
+            >
+              <Text style={[styles.filterBtnTxt, selectedCategory === f.id && { color: '#007AFF', fontWeight: '700' }]}>{f.label}</Text>
+            </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
@@ -173,6 +204,8 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, marginLeft: 10, fontSize: 15, backgroundColor: 'white', borderRadius: 15 },
   filterScroll: { marginTop: 10, paddingLeft: 20 },
   filterBtn: { backgroundColor: 'white', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, marginRight: 8, elevation: 2 },
+  filterBtnActive: { backgroundColor: '#EAF3FF', borderWidth: 1.5, borderColor: '#007AFF' },
+  filterBtnTxt: { fontSize: 13, color: '#3A3A3C' },
   nearbyBanner: {
     position: 'absolute', bottom: 110, left: 20,
     backgroundColor: 'white', flexDirection: 'row', alignItems: 'center',
