@@ -14,7 +14,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function DetailScreen() {
   const router = useRouter();
-  const { id, title, description, type, user, address, detailAddress, imagePaths, tags } = useLocalSearchParams();
+  const { id, title, description, type, user, userEmail, address, detailAddress, imagePaths, tags } = useLocalSearchParams();
 
   const [imageUrls, setImageUrls] = useState([]);
   const [imgLoading, setImgLoading] = useState(true);
@@ -26,7 +26,7 @@ export default function DetailScreen() {
   const parsedTags = tags ? JSON.parse(tags) : [];
   const parsedPaths = imagePaths ? JSON.parse(decodeURIComponent(imagePaths)) : [];
   const isGood = type === 'blue';
-  const isMyPost = auth.currentUser?.displayName === user || auth.currentUser?.email?.split('@')[0] === user;
+  const isMyPost = !!auth.currentUser && auth.currentUser.email === userEmail;
 
   useEffect(() => {
     const loadImages = async () => {

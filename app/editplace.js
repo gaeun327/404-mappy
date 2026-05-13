@@ -1,369 +1,392 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  StyleSheet, View, Text, TouchableOpacity, ScrollView,
-  Dimensions, ActivityIndicator, FlatList, Alert, Modal
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ScrollView, Alert, ActivityIndicator, Image, FlatList, Dimensions
 } from 'react-native';
-import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { storage, db, auth } from '../firebaseConfig';
-import { ref, getDownloadURL } from 'firebase/storage';
-import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { db, auth, storage } from '../firebaseConfig';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
+const PRESET_TAGS = ['#뷰맛집', '#데이트', '#혼자', '#친구들과', '#조용한', '#핫플', '#가성비', '#야간'];
+const MAX_IMAGES = 10;
 const { width } = Dimensions.get('window');
 
-export default function DetailScreen() {
+export default function EditPlaceScreen() {
   const router = useRouter();
-  const { id, title, description, type, user, imagePaths, tags } = useLocalSearchParams();
+  const { id } = useLocalSearchParams();
 
-  const [imageUrls, setImageUrls] = useState([]);
-  const [imgLoading, setImgLoading] = useState(true);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [bookmarked, setBookmarked] = useState(false);
-  const [bookmarkLoading, setBookmarkLoading] = useState(false);
-  const [menuVisible, setMenuVisible] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const parsedTags = tags ? JSON.parse(tags) : [];
-  const parsedPaths = imagePaths ? JSON.parse(decodeURIComponent(imagePaths)) : [];
-  const isGood = type === 'blue';
-  const isMyPost = auth.currentUser?.displayName === user || auth.currentUser?.email?.split('@')[0] === user;
+  const [pinType, setPinType] = useState('blue');
+  const [pinTitle, setPinTitle] = useState('');
+  const [pinDesc, setPinDesc] = useState('');
+  const [address, setAddress] = useState('');
+  const [detailAddress, setDetailAddress] = useState('');
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [customTag, setCustomTag] = useState('');
+
+  // existingImages: Storage에 이미 있는 이미지 { url, path }
+  // newImages: 새로 추가한 로컬 uri
+  // removedPaths: Storage에서 삭제할 경로들
+  const [existingImages, setExistingImages] = useState([]);
+  const [newImages, setNewImages] = useState([]);
+  const [removedPaths, setRemovedPaths] = useState([]);
 
   useEffect(() => {
-    const loadImages = async () => {
+    const fetchPlace = async () => {
+      if (!id) { Alert.alert('오류', '장소 ID가 없습니다.'); router.back(); return; }
       try {
-        if (parsedPaths.length > 0) {
-          const urls = await Promise.all(
-            parsedPaths.map(path => getDownloadURL(ref(storage, path)))
-          );
-          setImageUrls(urls);
-        }
-      } catch (e) {
-        console.log('이미지 로드 오류:', e);
-      } finally {
-        setImgLoading(false);
-      }
-    };
-
-    const checkBookmark = async () => {
-      try {
-        const userEmail = auth.currentUser?.email;
-        if (!userEmail || !id) return;
         const snap = await getDoc(doc(db, 'places', id));
-        if (snap.exists()) {
-          const bookmarks = snap.data().bookmarks ?? [];
-          setBookmarked(bookmarks.includes(userEmail));
+        if (!snap.exists()) { Alert.alert('오류', '장소를 찾을 수 없습니다.'); router.back(); return; }
+
+        const data = snap.data();
+
+        // 본인 글인지 확인
+        if (data.userEmail !== auth.currentUser?.email) {
+          Alert.alert('오류', '본인이 등록한 장소만 수정할 수 있습니다.');
+          router.back();
+          return;
         }
-      } catch (e) { console.log('북마크 확인 오류:', e); }
-    };
 
-    loadImages();
-    checkBookmark();
-  }, []);
+        setPinType(data.type ?? 'blue');
+        setPinTitle(data.title ?? '');
+        setPinDesc(data.description ?? '');
+        setAddress(data.address ?? '');
+        setDetailAddress(data.detailAddress ?? '');
+        setSelectedTags(data.tags ?? []);
 
-  const toggleBookmark = async () => {
-    const userEmail = auth.currentUser?.email;
-    if (!userEmail || !id) return;
-    setBookmarkLoading(true);
-    try {
-      const placeRef = doc(db, 'places', id);
-      if (bookmarked) {
-        await updateDoc(placeRef, { bookmarks: arrayRemove(userEmail) });
-        setBookmarked(false);
-      } else {
-        await updateDoc(placeRef, { bookmarks: arrayUnion(userEmail) });
-        setBookmarked(true);
+        const urls = data.imageUrls ?? [];
+        const paths = data.imagePaths ?? [];
+        setExistingImages(urls.map((url, i) => ({ url, path: paths[i] ?? '' })));
+      } catch (e) {
+        Alert.alert('오류', '데이터를 불러오지 못했습니다.');
+        router.back();
+      } finally {
+        setLoading(false);
       }
-    } catch (e) { console.log('북마크 오류:', e); }
-    finally { setBookmarkLoading(false); }
+    };
+    fetchPlace();
+  }, [id]);
+
+  const toggleTag = (tag) => {
+    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   };
 
-  const handleDelete = () => {
-    setMenuVisible(false);
-    Alert.alert('삭제', '이 장소를 삭제할까요?', [
+  const addCustomTag = () => {
+    if (!customTag.trim()) return;
+    const tag = customTag.startsWith('#') ? customTag.trim() : `#${customTag.trim()}`;
+    if (!selectedTags.includes(tag)) setSelectedTags(prev => [...prev, tag]);
+    setCustomTag('');
+  };
+
+  const totalImages = existingImages.length + newImages.length;
+
+  const pickFromGallery = async () => {
+    if (totalImages >= MAX_IMAGES) { Alert.alert('알림', `사진은 최대 ${MAX_IMAGES}장까지 추가할 수 있어요.`); return; }
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('권한 필요', '갤러리 접근 권한이 필요합니다.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'], allowsMultipleSelection: true,
+      selectionLimit: MAX_IMAGES - totalImages, quality: 0.7,
+    });
+    if (!result.canceled) {
+      const newUris = result.assets.map(a => a.uri);
+      setNewImages(prev => [...prev, ...newUris].slice(0, MAX_IMAGES - existingImages.length));
+    }
+  };
+
+  const pickFromCamera = async () => {
+    if (totalImages >= MAX_IMAGES) { Alert.alert('알림', `사진은 최대 ${MAX_IMAGES}장까지 추가할 수 있어요.`); return; }
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('권한 필요', '카메라 접근 권한이 필요합니다.'); return; }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.7 });
+    if (!result.canceled) setNewImages(prev => [...prev, result.assets[0].uri]);
+  };
+
+  const handleImagePick = () => {
+    Alert.alert('사진 추가', '어떻게 추가할까요?', [
+      { text: '카메라로 촬영', onPress: pickFromCamera },
+      { text: '갤러리에서 선택', onPress: pickFromGallery },
       { text: '취소', style: 'cancel' },
-      {
-        text: '삭제', style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteDoc(doc(db, 'places', id));
-            router.back();
-          } catch (e) { Alert.alert('오류', '삭제에 실패했어요.'); }
-        }
-      }
     ]);
   };
 
-  const handleEdit = () => {
-    setMenuVisible(false);
-    router.push({ pathname: '/editplace', params: { id } });
+  const removeExistingImage = (index) => {
+    const removed = existingImages[index];
+    if (removed.path) setRemovedPaths(prev => [...prev, removed.path]);
+    setExistingImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  const fallbackImage = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800';
-  const displayImages = imageUrls.length > 0 ? imageUrls : [fallbackImage];
+  const removeNewImage = (index) => {
+    setNewImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadImage = async (uri, index) => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.onload = async () => {
+        try {
+          const blob = xhr.response;
+          const path = `places/${id}_edit_${Date.now()}_${index}.jpg`;
+          const storageRef = ref(storage, path);
+          await uploadBytes(storageRef, blob, { contentType: 'image/jpeg' });
+          const url = await getDownloadURL(storageRef);
+          resolve({ url, path });
+        } catch (e) { reject(e); }
+      };
+      xhr.onerror = reject;
+      xhr.responseType = 'blob';
+      xhr.open('GET', uri, true);
+      xhr.send(null);
+    });
+  };
+
+  const handleSave = async () => {
+    if (!pinTitle.trim()) return Alert.alert('알림', '장소 이름을 입력해주세요.');
+    setSaving(true);
+
+    try {
+      // 새 이미지 업로드
+      let uploaded = [];
+      if (newImages.length > 0) {
+        uploaded = await Promise.all(newImages.map((uri, i) => uploadImage(uri, i)));
+      }
+
+      // 최종 이미지 배열
+      const finalUrls = [...existingImages.map(img => img.url), ...uploaded.map(r => r.url)];
+      const finalPaths = [...existingImages.map(img => img.path), ...uploaded.map(r => r.path)];
+
+      // Firestore 업데이트
+      await updateDoc(doc(db, 'places', id), {
+        type: pinType,
+        title: pinTitle,
+        description: pinDesc,
+        address,
+        detailAddress,
+        tags: selectedTags,
+        imageUrls: finalUrls,
+        imagePaths: finalPaths,
+        updatedAt: new Date(),
+      });
+
+      // 삭제된 이미지 Storage에서 제거 (실패해도 무시)
+      if (removedPaths.length > 0) {
+        await Promise.allSettled(
+          removedPaths.filter(p => p).map(p => deleteObject(ref(storage, p)))
+        );
+      }
+
+      Alert.alert('완료', '장소가 수정되었습니다! ✅', [
+        { text: '확인', onPress: () => router.back() }
+      ]);
+    } catch (e) {
+      Alert.alert('오류', e.message ?? '저장에 실패했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingCenter}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>장소 정보를 불러오는 중...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const imageList = [
+    ...existingImages.map((img, i) => ({ type: 'existing', uri: img.url, index: i })),
+    ...newImages.map((uri, i) => ({ type: 'new', uri, index: i })),
+    ...(totalImages < MAX_IMAGES ? [{ type: 'add' }] : []),
+  ];
 
   return (
-    <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false} bounces={true}>
-
-        {/* 히어로 사진 영역 */}
-        <View style={styles.heroContainer}>
-          {imgLoading ? (
-            <View style={styles.heroLoading}>
-              <ActivityIndicator color="white" size="large" />
-            </View>
-          ) : (
-            <FlatList
-              data={displayImages}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(_, i) => i.toString()}
-              onMomentumScrollEnd={(e) => {
-                const index = Math.round(e.nativeEvent.contentOffset.x / width);
-                setCurrentIndex(index);
-              }}
-              renderItem={({ item }) => (
-                <Image source={item} style={styles.heroImage} contentFit="cover" />
-              )}
-            />
-          )}
-
-          {/* 상단 그라데이션 느낌 - 버튼 가독성용 */}
-          <View style={styles.topGradient} />
-
-          {/* 하단 그라데이션 - 텍스트 오버레이용 */}
-          <View style={styles.bottomGradient} />
-
-          {/* 뒤로가기 */}
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Ionicons name="chevron-back" size={22} color="white" />
-          </TouchableOpacity>
-
-          {/* 우측 버튼들 */}
-          <View style={styles.topRight}>
-            <TouchableOpacity style={styles.iconBtn} onPress={toggleBookmark} disabled={bookmarkLoading}>
-              {bookmarkLoading
-                ? <ActivityIndicator size="small" color="white" />
-                : <Ionicons
-                    name={bookmarked ? 'bookmark' : 'bookmark-outline'}
-                    size={22}
-                    color={bookmarked ? '#FFD60A' : 'white'}
-                  />
-              }
-            </TouchableOpacity>
-            {isMyPost && (
-              <TouchableOpacity style={styles.iconBtn} onPress={() => setMenuVisible(true)}>
-                <Ionicons name="ellipsis-vertical" size={22} color="white" />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* 사진 카운터 */}
-          {displayImages.length > 1 && (
-            <View style={styles.counter}>
-              <Text style={styles.counterTxt}>{currentIndex + 1} / {displayImages.length}</Text>
-            </View>
-          )}
-
-          {/* 하단 인디케이터 */}
-          {displayImages.length > 1 && (
-            <View style={styles.dotRow}>
-              {displayImages.map((_, i) => (
-                <View key={i} style={[styles.dot, i === currentIndex && styles.dotActive]} />
-              ))}
-            </View>
-          )}
-
-          {/* 히어로 하단 텍스트 오버레이 */}
-          <View style={styles.heroBottom}>
-            <View style={styles.badgeRow}>
-              <View style={[styles.typeBadge, { backgroundColor: isGood ? '#007AFF' : '#FF3B30' }]}>
-                <Text style={styles.typeBadgeTxt}>{isGood ? '👍 추천' : '👎 비추천'}</Text>
-              </View>
-              {parsedTags.slice(0, 2).map((tag, i) => (
-                <View key={i} style={styles.tagBadge}>
-                  <Text style={styles.tagBadgeTxt}>{tag}</Text>
-                </View>
-              ))}
-            </View>
-            <Text style={styles.heroTitle} numberOfLines={2}>{title}</Text>
-            <View style={styles.heroUserRow}>
-              <View style={styles.heroAvatar}>
-                <Text style={styles.heroAvatarTxt}>
-                  {user && user !== 'undefined' ? user.charAt(0).toUpperCase() : '?'}
-                </Text>
-              </View>
-              <Text style={styles.heroUserTxt}>{user && user !== 'undefined' ? user : '익명'}님 · {new Date().toLocaleDateString('ko-KR')}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* 콘텐츠 영역 */}
-        <View style={styles.contentBox}>
-
-          {/* 한줄 평 */}
-          {description ? (
-            <View style={styles.reviewSection}>
-              <Text style={styles.reviewQuote}>"</Text>
-              <Text style={styles.reviewTxt}>{description}</Text>
-              <Text style={[styles.reviewQuote, { textAlign: 'right' }]}>"</Text>
-            </View>
-          ) : null}
-
-          {/* 태그 */}
-          {parsedTags.length > 0 && (
-            <View style={styles.tagRow}>
-              {parsedTags.map((tag, i) => (
-                <View key={i} style={styles.tagChip}>
-                  <Text style={styles.tagChipTxt}>{tag}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* 구분선 */}
-          <View style={styles.divider} />
-
-          {/* 정보 카드 2열 */}
-          <View style={styles.infoRow}>
-            <View style={styles.infoCard}>
-              <Ionicons name="location-outline" size={18} color="#007AFF" style={{ marginBottom: 6 }} />
-              <Text style={styles.infoLabel}>위치</Text>
-              <Text style={styles.infoVal}>지도에서 확인</Text>
-            </View>
-            <View style={styles.infoCard}>
-              <Ionicons name={isGood ? 'thumbs-up-outline' : 'thumbs-down-outline'} size={18} color={isGood ? '#007AFF' : '#FF3B30'} style={{ marginBottom: 6 }} />
-              <Text style={styles.infoLabel}>유형</Text>
-              <Text style={styles.infoVal}>{isGood ? '추천 스팟' : '주의 스팟'}</Text>
-            </View>
-            <View style={styles.infoCard}>
-              <Ionicons name="calendar-outline" size={18} color="#007AFF" style={{ marginBottom: 6 }} />
-              <Text style={styles.infoLabel}>등록일</Text>
-              <Text style={styles.infoVal}>{new Date().toLocaleDateString('ko-KR')}</Text>
-            </View>
-          </View>
-
-          {/* 북마크 버튼 */}
-          <TouchableOpacity
-            style={[styles.bookmarkBtn, bookmarked && styles.bookmarkBtnOn]}
-            onPress={toggleBookmark}
-            disabled={bookmarkLoading}
-          >
-            {bookmarkLoading ? (
-              <ActivityIndicator color={bookmarked ? 'white' : '#007AFF'} />
-            ) : (
-              <>
-                <Ionicons
-                  name={bookmarked ? 'bookmark' : 'bookmark-outline'}
-                  size={20}
-                  color={bookmarked ? 'white' : '#007AFF'}
-                />
-                <Text style={[styles.bookmarkBtnTxt, bookmarked && { color: 'white' }]}>
-                  {bookmarked ? '저장됨' : '저장하기'}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-        </View>
-      </ScrollView>
-
-      {/* 수정/삭제 메뉴 모달 */}
-      <Modal visible={menuVisible} transparent animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} onPress={() => setMenuVisible(false)}>
-          <View style={styles.menuSheet}>
-            <View style={styles.menuHandle} />
-            <TouchableOpacity style={styles.menuItem} onPress={handleEdit}>
-              <Ionicons name="pencil-outline" size={20} color="#1C1C1E" />
-              <Text style={styles.menuItemTxt}>수정하기</Text>
-            </TouchableOpacity>
-            <View style={styles.menuDivider} />
-            <TouchableOpacity style={styles.menuItem} onPress={handleDelete}>
-              <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-              <Text style={[styles.menuItemTxt, { color: '#FF3B30' }]}>삭제하기</Text>
-            </TouchableOpacity>
-          </View>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={22} color="#1C1C1E" />
         </TouchableOpacity>
-      </Modal>
-    </View>
+        <Text style={styles.headerTitle}>장소 수정</Text>
+        <TouchableOpacity
+          style={[styles.saveHeaderBtn, { backgroundColor: pinType === 'blue' ? '#007AFF' : '#FF3B30' }]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving ? <ActivityIndicator color="white" size="small" /> : <Text style={styles.saveHeaderTxt}>저장</Text>}
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.imageSection}>
+          <FlatList
+            data={imageList}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item, i) => `${item.type}-${i}`}
+            renderItem={({ item }) => {
+              if (item.type === 'add') {
+                return (
+                  <TouchableOpacity style={styles.addImageBtn} onPress={handleImagePick}>
+                    <Ionicons name="camera-outline" size={28} color="#C7C7CC" />
+                    <Text style={styles.addImageCount}>{totalImages}/{MAX_IMAGES}</Text>
+                  </TouchableOpacity>
+                );
+              }
+              return (
+                <View style={styles.imageThumb}>
+                  <Image source={{ uri: item.uri }} style={styles.thumbImg} />
+                  <TouchableOpacity
+                    style={styles.removeBtn}
+                    onPress={() => item.type === 'existing'
+                      ? removeExistingImage(item.index)
+                      : removeNewImage(item.index)
+                    }
+                  >
+                    <Ionicons name="close-circle" size={22} color="white" />
+                  </TouchableOpacity>
+                </View>
+              );
+            }}
+            ListEmptyComponent={
+              <TouchableOpacity style={styles.emptyImageBtn} onPress={handleImagePick}>
+                <Ionicons name="camera-outline" size={32} color="#C7C7CC" />
+                <Text style={styles.imgPlaceholderText}>사진 추가 (최대 10장)</Text>
+                <Text style={styles.imgPlaceholderSub}>탭하여 카메라 촬영 또는 갤러리 선택</Text>
+              </TouchableOpacity>
+            }
+          />
+        </View>
+
+        <Text style={styles.sectionLabel}>주소</Text>
+        <TextInput style={styles.input} value={address} onChangeText={setAddress} placeholder="주소를 입력해주세요" />
+
+        <Text style={styles.sectionLabel}>상세주소</Text>
+        <TextInput style={styles.input} value={detailAddress} onChangeText={setDetailAddress} placeholder="예: 2층, B동 101호" />
+
+        <Text style={styles.sectionLabel}>유형</Text>
+        <View style={styles.typeRow}>
+          <TouchableOpacity style={[styles.typeBtn, pinType === 'blue' && styles.typeBtnBlue]} onPress={() => setPinType('blue')}>
+            <Text style={[styles.typeBtnTxt, pinType === 'blue' && { color: 'white' }]}>👍 추천 (Blue)</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.typeBtn, pinType === 'red' && styles.typeBtnRed]} onPress={() => setPinType('red')}>
+            <Text style={[styles.typeBtnTxt, pinType === 'red' && { color: 'white' }]}>👎 경고 (Red)</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.sectionLabel}>장소 이름 <Text style={styles.required}>*</Text></Text>
+        <TextInput style={styles.input} placeholder="예: 성수 감성 카페" value={pinTitle} onChangeText={setPinTitle} />
+
+        <Text style={styles.sectionLabel}>한줄 평</Text>
+        <TextInput
+          style={[styles.input, { height: 90, textAlignVertical: 'top', paddingTop: 14 }]}
+          placeholder="예: 분위기 좋고 커피 맛있어요!"
+          value={pinDesc} onChangeText={setPinDesc} multiline
+        />
+
+        <Text style={styles.sectionLabel}>해시태그</Text>
+        <View style={styles.tagWrap}>
+          {PRESET_TAGS.map(tag => (
+            <TouchableOpacity
+              key={tag}
+              style={[styles.tagChip, selectedTags.includes(tag) && styles.tagChipOn]}
+              onPress={() => toggleTag(tag)}
+            >
+              <Text style={[styles.tagChipTxt, selectedTags.includes(tag) && { color: 'white' }]}>{tag}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.customRow}>
+          <TextInput
+            style={[styles.input, { flex: 1, marginBottom: 0 }]}
+            placeholder="직접 입력 (예: #반려동물)"
+            value={customTag} onChangeText={setCustomTag}
+            onSubmitEditing={addCustomTag} returnKeyType="done"
+          />
+          <TouchableOpacity style={styles.addBtn} onPress={addCustomTag}>
+            <Ionicons name="add" size={22} color="white" />
+          </TouchableOpacity>
+        </View>
+
+        {selectedTags.filter(t => !PRESET_TAGS.includes(t)).length > 0 && (
+          <View style={[styles.tagWrap, { marginTop: 10 }]}>
+            {selectedTags.filter(t => !PRESET_TAGS.includes(t)).map(tag => (
+              <TouchableOpacity key={tag} style={styles.tagChipOn} onPress={() => toggleTag(tag)}>
+                <Text style={[styles.tagChipTxt, { color: 'white' }]}>{tag} ✕</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[styles.saveBtn, { backgroundColor: pinType === 'blue' ? '#007AFF' : '#FF3B30' }]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving ? <ActivityIndicator color="white" /> : <Text style={styles.saveBtnTxt}>수정 완료</Text>}
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'white' },
-
-  heroContainer: { width, height: 420, position: 'relative' },
-  heroLoading: { width, height: 420, backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center' },
-  heroImage: { width, height: 420 },
-
-  topGradient: {
-    position: 'absolute', top: 0, left: 0, right: 0, height: 120,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+  loadingCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 14 },
+  loadingText: { fontSize: 15, color: '#8E8E93' },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: '#F2F2F7',
   },
-  bottomGradient: {
-    position: 'absolute', bottom: 0, left: 0, right: 0, height: 200,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+  backBtn: { width: 36, height: 36, justifyContent: 'center' },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#1C1C1E' },
+  saveHeaderBtn: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
+  saveHeaderTxt: { color: 'white', fontWeight: '700', fontSize: 14 },
+  content: { paddingTop: 20, paddingBottom: 40 },
+  imageSection: { height: 160, marginBottom: 20, paddingLeft: 24 },
+  emptyImageBtn: {
+    width: width - 48, height: 150, borderRadius: 16,
+    backgroundColor: '#F8F8F8', borderWidth: 1.5, borderColor: '#E5E5EA',
+    borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-
-  backBtn: {
-    position: 'absolute', top: 52, left: 16,
-    width: 36, height: 36, borderRadius: 18,
-    justifyContent: 'center', alignItems: 'center',
+  addImageBtn: {
+    width: 100, height: 150, borderRadius: 16, marginRight: 10,
+    backgroundColor: '#F8F8F8', borderWidth: 1.5, borderColor: '#E5E5EA',
+    borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
-  topRight: { position: 'absolute', top: 52, right: 16, flexDirection: 'row', gap: 4 },
-  iconBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-
-  counter: {
-    position: 'absolute', top: 58, alignSelf: 'center', left: width / 2 - 24,
-    backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20,
-  },
-  counterTxt: { color: 'white', fontSize: 12, fontWeight: '600' },
-
-  dotRow: { position: 'absolute', bottom: 96, flexDirection: 'row', alignSelf: 'center', gap: 5, left: 0, right: 0, justifyContent: 'center' },
-  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.45)' },
-  dotActive: { backgroundColor: 'white', width: 16 },
-
-  heroBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20, paddingBottom: 28 },
-  badgeRow: { flexDirection: 'row', gap: 8, marginBottom: 10, flexWrap: 'wrap' },
-  typeBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
-  typeBadgeTxt: { color: 'white', fontSize: 12, fontWeight: '700' },
-  tagBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.4)' },
-  tagBadgeTxt: { color: 'white', fontSize: 12 },
-  heroTitle: { fontSize: 28, fontWeight: '800', color: 'white', marginBottom: 10, lineHeight: 34 },
-  heroUserRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  heroAvatar: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.25)', justifyContent: 'center', alignItems: 'center' },
-  heroAvatarTxt: { fontSize: 11, fontWeight: '700', color: 'white' },
-  heroUserTxt: { fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: '500' },
-
-  contentBox: { backgroundColor: 'white', borderTopLeftRadius: 28, borderTopRightRadius: 28, marginTop: -28, padding: 24, paddingBottom: 48 },
-
-  reviewSection: { marginBottom: 24, paddingHorizontal: 4 },
-  reviewQuote: { fontSize: 36, color: '#E5E5EA', fontWeight: '800', lineHeight: 36 },
-  reviewTxt: { fontSize: 17, color: '#1C1C1E', lineHeight: 28, fontWeight: '500', paddingHorizontal: 8, marginVertical: -4 },
-
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
-  tagChip: { backgroundColor: '#F2F2F7', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
-  tagChipTxt: { fontSize: 13, color: '#3A3A3C', fontWeight: '600' },
-
-  divider: { height: 1, backgroundColor: '#F2F2F7', marginBottom: 24 },
-
-  infoRow: { flexDirection: 'row', gap: 10, marginBottom: 28 },
-  infoCard: { flex: 1, backgroundColor: '#F8F8F8', borderRadius: 16, padding: 14 },
-  infoLabel: { fontSize: 11, color: '#8E8E93', marginBottom: 2 },
-  infoVal: { fontSize: 12, fontWeight: '700', color: '#1C1C1E' },
-
-  bookmarkBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    paddingVertical: 17, borderRadius: 16,
-    borderWidth: 1.5, borderColor: '#007AFF', backgroundColor: 'white',
-  },
-  bookmarkBtnOn: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
-  bookmarkBtnTxt: { fontSize: 16, fontWeight: '700', color: '#007AFF' },
-
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  menuSheet: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16, paddingBottom: 44 },
-  menuHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5EA', alignSelf: 'center', marginBottom: 16 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, paddingHorizontal: 8 },
-  menuItemTxt: { fontSize: 16, fontWeight: '600', color: '#1C1C1E' },
-  menuDivider: { height: 1, backgroundColor: '#F2F2F7' },
+  addImageCount: { fontSize: 12, color: '#C7C7CC' },
+  imageThumb: { width: 150, height: 150, borderRadius: 16, marginRight: 10, overflow: 'hidden' },
+  thumbImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  removeBtn: { position: 'absolute', top: 6, right: 6 },
+  imgPlaceholderText: { fontSize: 15, fontWeight: '600', color: '#8E8E93' },
+  imgPlaceholderSub: { fontSize: 12, color: '#C7C7CC' },
+  sectionLabel: { fontSize: 13, fontWeight: '700', color: '#1C1C1E', marginBottom: 10, paddingHorizontal: 24 },
+  required: { color: '#FF3B30' },
+  typeRow: { flexDirection: 'row', gap: 10, marginBottom: 20, paddingHorizontal: 24 },
+  typeBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E5EA' },
+  typeBtnBlue: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
+  typeBtnRed: { backgroundColor: '#FF3B30', borderColor: '#FF3B30' },
+  typeBtnTxt: { fontWeight: '700', fontSize: 14, color: '#8E8E93' },
+  input: { backgroundColor: '#F2F2F7', padding: 14, borderRadius: 12, fontSize: 15, marginBottom: 20, marginHorizontal: 24 },
+  tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14, paddingHorizontal: 24 },
+  tagChip: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F2F2F7', borderWidth: 1.5, borderColor: '#E5E5EA' },
+  tagChipOn: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 20, backgroundColor: '#007AFF', borderWidth: 1.5, borderColor: '#007AFF' },
+  tagChipTxt: { fontSize: 13, fontWeight: '600', color: '#8E8E93' },
+  customRow: { flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 20, paddingHorizontal: 24 },
+  addBtn: { width: 46, height: 46, backgroundColor: '#007AFF', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  saveBtn: { padding: 17, borderRadius: 14, alignItems: 'center', marginTop: 10, marginHorizontal: 24 },
+  saveBtnTxt: { color: 'white', fontWeight: '800', fontSize: 16 },
 });

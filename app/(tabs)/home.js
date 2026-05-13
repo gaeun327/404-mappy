@@ -82,8 +82,9 @@ export default function HomeScreen() {
         description: pin.description,
         type: pin.type,
         user: pin.userNickname,
+        userEmail: pin.userEmail ?? '',
         address: pin.address ?? '',
-        detailAddress: pin.detailAddress ?? '',  // ✅ 추가
+        detailAddress: pin.detailAddress ?? '',
         imagePaths: encodeURIComponent(JSON.stringify(pin.imagePaths ?? [])),
         tags: JSON.stringify(pin.tags ?? []),
       }

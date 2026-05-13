@@ -52,13 +52,12 @@ export default function AddPlaceScreen() {
         console.log('📦 응답 주소:', data.results?.[0]?.formatted_address);
 
         if (data.results && data.results.length > 0) {
-          // ✅ 전체 주소 대신 동네 수준으로 파싱
-          const components = data.results[0].address_components;
-          const dong = components?.find(c => c.types.includes('sublocality_level_2'))?.long_name;
-          const gu = components?.find(c => c.types.includes('sublocality_level_1'))?.long_name;
-          const si = components?.find(c => c.types.includes('locality'))?.long_name;
-          const shortAddress = [si, gu, dong].filter(Boolean).join(' ');
-          setAddress(shortAddress || data.results[0].formatted_address);
+          // 도로명 주소 우선(street_address), 없으면 첫 번째 결과
+          const roadResult = data.results.find(r => r.types.includes('street_address'));
+          const best = roadResult ?? data.results[0];
+          // formatted_address에서 "대한민국 " 접두어만 제거
+          const formatted = best.formatted_address.replace(/^대한민국\s*/, '');
+          setAddress(formatted);
         } else {
           setAddress(paramAddress ?? '');
         }
