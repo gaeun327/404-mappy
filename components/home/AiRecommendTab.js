@@ -97,7 +97,7 @@ ${JSON.stringify(placesContext, null, 2)}
 5. message는 한국어로, 친근하고 자연스럽게 써주세요.`;
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -179,8 +179,14 @@ ${JSON.stringify(placesContext, null, 2)}
       >
         {/* 헤더 */}
         <View style={styles.header}>
-          <Text style={styles.headerLabel}>AI POWERED</Text>
+          <View style={styles.headerLeft}>
+            <View style={styles.aiDot} />
+            <Text style={styles.headerLabel}>AI MAPPY</Text>
+          </View>
           <Text style={styles.headerTitle}>장소 추천</Text>
+          <Text style={styles.headerSub}>
+            {dataLoading ? '데이터 불러오는 중...' : `${allPlaces.length}개 장소 분석 완료`}
+          </Text>
         </View>
 
         {/* 채팅 영역 */}
@@ -190,14 +196,18 @@ ${JSON.stringify(placesContext, null, 2)}
           contentContainerStyle={styles.chatContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* 빠른 질문 버튼 (첫 메시지만 있을 때) */}
+          {/* 빠른 질문 버튼 */}
           {messages.length === 1 && (
-            <View style={styles.quickWrap}>
-              {QUICK_PROMPTS.map((q, i) => (
-                <TouchableOpacity key={i} style={styles.quickBtn} onPress={() => sendMessage(q)}>
-                  <Text style={styles.quickBtnTxt}>{q}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.quickSection}>
+              <Text style={styles.quickLabel}>자주 찾는 질문</Text>
+              <View style={styles.quickWrap}>
+                {QUICK_PROMPTS.map((q, i) => (
+                  <TouchableOpacity key={i} style={styles.quickBtn} onPress={() => sendMessage(q)} activeOpacity={0.7}>
+                    <Ionicons name="search-outline" size={13} color="#8B5CF6" style={{ marginRight: 6 }} />
+                    <Text style={styles.quickBtnTxt}>{q}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           )}
 
@@ -207,7 +217,7 @@ ${JSON.stringify(placesContext, null, 2)}
               <View style={[styles.bubble, msg.role === 'user' ? styles.bubbleUser : styles.bubbleAi]}>
                 {msg.role === 'assistant' && (
                   <View style={styles.aiAvatar}>
-                    <Ionicons name="sparkles" size={14} color="#8B5CF6" />
+                    <Ionicons name="sparkles" size={13} color="white" />
                   </View>
                 )}
                 <View style={[styles.bubbleInner, msg.role === 'user' ? styles.bubbleInnerUser : styles.bubbleInnerAi]}>
@@ -218,21 +228,27 @@ ${JSON.stringify(placesContext, null, 2)}
               {/* 추천 장소 카드 */}
               {msg.places?.length > 0 && (
                 <View style={styles.placeCards}>
+                  <Text style={styles.placeCardsLabel}>추천 장소 {msg.places.length}곳</Text>
                   {msg.places.map((place, pi) => (
                     <TouchableOpacity key={pi} style={styles.placeCard} onPress={() => goToDetail(place)} activeOpacity={0.85}>
-                      <View style={styles.placeCardLeft}>
-                        <Text style={styles.placeRank}>{pi + 1}</Text>
+                      <View style={[styles.placeRankBadge, pi === 0 && styles.placeRankBadgeFirst]}>
+                        <Text style={[styles.placeRank, pi === 0 && { color: '#fff' }]}>{pi + 1}</Text>
                       </View>
                       <View style={styles.placeCardBody}>
                         <View style={styles.placeNameRow}>
                           <Text style={styles.placeName} numberOfLines={1}>{place.title}</Text>
                           <View style={[styles.typePill, { backgroundColor: place.type === 'blue' ? '#EAF3FF' : '#FFF0EF' }]}>
                             <Text style={[styles.typePillTxt, { color: place.type === 'blue' ? '#007AFF' : '#FF3B30' }]}>
-                              {place.type === 'blue' ? '👍' : '👎'}
+                              {place.type === 'blue' ? '👍 추천' : '👎 주의'}
                             </Text>
                           </View>
                         </View>
-                        {place.address ? <Text style={styles.placeAddr} numberOfLines={1}>📍 {place.address}</Text> : null}
+                        {place.address ? (
+                          <View style={styles.addrRow}>
+                            <Ionicons name="location-outline" size={11} color="#AEAEB2" />
+                            <Text style={styles.placeAddr} numberOfLines={1}>{place.address}</Text>
+                          </View>
+                        ) : null}
                         {place.description ? <Text style={styles.placeDesc} numberOfLines={2}>{place.description}</Text> : null}
                         {place.tags?.length > 0 && (
                           <View style={styles.tagRow}>
@@ -244,7 +260,9 @@ ${JSON.stringify(placesContext, null, 2)}
                           </View>
                         )}
                       </View>
-                      <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+                      <View style={styles.chevronWrap}>
+                        <Ionicons name="chevron-forward" size={14} color="#8B5CF6" />
+                      </View>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -254,13 +272,14 @@ ${JSON.stringify(placesContext, null, 2)}
 
           {/* AI 로딩 */}
           {aiLoading && (
-            <View style={styles.bubble}>
+            <View style={styles.bubbleAi}>
               <View style={styles.aiAvatar}>
-                <Ionicons name="sparkles" size={14} color="#8B5CF6" />
+                <Ionicons name="sparkles" size={13} color="white" />
               </View>
               <View style={styles.loadingBubble}>
                 <ActivityIndicator size="small" color="#8B5CF6" />
-                <Text style={styles.loadingTxt}>추천 장소 찾는 중...</Text>
+                <Text style={styles.loadingTxt}>장소 분석 중</Text>
+                <Text style={styles.loadingDots}>...</Text>
               </View>
             </View>
           )}
@@ -268,24 +287,28 @@ ${JSON.stringify(placesContext, null, 2)}
 
         {/* 입력창 */}
         <View style={styles.inputBar}>
-          <TextInput
-            style={styles.input}
-            placeholder={dataLoading ? '장소 데이터 불러오는 중...' : '어떤 장소를 찾고 계신가요?'}
-            placeholderTextColor="#C7C7CC"
-            value={input}
-            onChangeText={setInput}
-            multiline
-            maxLength={200}
-            editable={!dataLoading}
-            returnKeyType="send"
-            onSubmitEditing={() => sendMessage(input)}
-          />
+          <View style={styles.inputWrap}>
+            <Ionicons name="location-outline" size={16} color="#8B5CF6" style={{ marginLeft: 14 }} />
+            <TextInput
+              style={styles.input}
+              placeholder={dataLoading ? '데이터 로딩 중...' : '어떤 장소를 찾으세요?'}
+              placeholderTextColor="#C7C7CC"
+              value={input}
+              onChangeText={setInput}
+              multiline
+              maxLength={200}
+              editable={!dataLoading}
+              returnKeyType="send"
+              onSubmitEditing={() => sendMessage(input)}
+            />
+          </View>
           <TouchableOpacity
-            style={[styles.sendBtn, { opacity: input.trim() && !aiLoading ? 1 : 0.4 }]}
+            style={[styles.sendBtn, { opacity: input.trim() && !aiLoading ? 1 : 0.35 }]}
             onPress={() => sendMessage(input)}
             disabled={!input.trim() || aiLoading || dataLoading}
+            activeOpacity={0.8}
           >
-            <Ionicons name="send" size={18} color="white" />
+            <Ionicons name="arrow-up" size={20} color="white" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -294,76 +317,113 @@ ${JSON.stringify(placesContext, null, 2)}
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F2F2F7' },
+  safeArea: { flex: 1, backgroundColor: '#FAFAFA' },
 
   header: {
-    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14,
+    backgroundColor: '#FAFAFA',
+    borderBottomWidth: 1, borderBottomColor: '#F0F0F5',
   },
-  headerLabel: { fontSize: 11, fontWeight: '700', color: '#8B5CF6', letterSpacing: 1.5, marginBottom: 2 },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: '#1C1C1E', letterSpacing: -0.5 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  aiDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#8B5CF6' },
+  headerLabel: { fontSize: 11, fontWeight: '800', color: '#8B5CF6', letterSpacing: 2 },
+  headerTitle: { fontSize: 22, fontWeight: '800', color: '#1C1C1E', letterSpacing: -0.5, marginBottom: 2 },
+  headerSub: { fontSize: 12, color: '#AEAEB2', fontWeight: '500' },
 
-  chatArea: { flex: 1 },
-  chatContent: { paddingHorizontal: 16, paddingBottom: 16 },
+  chatArea: { flex: 1, backgroundColor: '#FAFAFA' },
+  chatContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 20 },
 
-  quickWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
+  quickSection: { marginBottom: 24 },
+  quickLabel: { fontSize: 12, fontWeight: '700', color: '#AEAEB2', letterSpacing: 0.5, marginBottom: 10 },
+  quickWrap: { gap: 8 },
   quickBtn: {
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-    backgroundColor: 'white', borderWidth: 1, borderColor: '#E5E5EA',
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 11, borderRadius: 14,
+    backgroundColor: 'white',
+    borderWidth: 1, borderColor: '#EEE8FF',
+    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 1,
   },
-  quickBtnTxt: { fontSize: 13, color: '#3A3A3C', fontWeight: '500' },
+  quickBtnTxt: { fontSize: 13, color: '#3A3A3C', fontWeight: '500', flex: 1 },
 
-  bubble: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 12 },
-  bubbleUser: { justifyContent: 'flex-end' },
-  bubbleAi: { justifyContent: 'flex-start' },
+  bubble: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 14 },
+  bubbleUser: { justifyContent: 'flex-end', marginBottom: 14 },
+  bubbleAi: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 14 },
   aiAvatar: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: '#F3EEFF', alignItems: 'center', justifyContent: 'center',
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: '#8B5CF6',
+    alignItems: 'center', justifyContent: 'center',
     marginBottom: 2,
+    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 3,
   },
-  bubbleInner: { maxWidth: '78%', borderRadius: 18, padding: 12 },
-  bubbleInnerUser: { backgroundColor: '#8B5CF6', borderBottomRightRadius: 4 },
-  bubbleInnerAi: { backgroundColor: 'white', borderBottomLeftRadius: 4 },
-  bubbleTxt: { fontSize: 15, color: '#1C1C1E', lineHeight: 22 },
+  bubbleInner: { maxWidth: '78%', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12 },
+  bubbleInnerUser: {
+    backgroundColor: '#8B5CF6', borderBottomRightRadius: 4,
+    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
+  },
+  bubbleInnerAi: {
+    backgroundColor: 'white', borderBottomLeftRadius: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+  },
+  bubbleTxt: { fontSize: 15, color: '#1C1C1E', lineHeight: 23 },
 
   loadingBubble: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'white', borderRadius: 18, borderBottomLeftRadius: 4, padding: 12,
+    backgroundColor: 'white', borderRadius: 20, borderBottomLeftRadius: 4,
+    paddingHorizontal: 16, paddingVertical: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
   },
-  loadingTxt: { fontSize: 13, color: '#8E8E93' },
+  loadingTxt: { fontSize: 14, color: '#8B5CF6', fontWeight: '600' },
+  loadingDots: { fontSize: 14, color: '#C4B5FD' },
 
-  placeCards: { marginLeft: 36, marginBottom: 12, gap: 8 },
+  placeCards: { marginLeft: 38, marginBottom: 14, gap: 10 },
+  placeCardsLabel: { fontSize: 11, fontWeight: '700', color: '#AEAEB2', letterSpacing: 0.5, marginBottom: 6 },
   placeCard: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: 'white',
-    borderRadius: 14, padding: 12, gap: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'white', borderRadius: 18, padding: 14, gap: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 3,
+    borderWidth: 1, borderColor: '#F5F5F5',
   },
-  placeCardLeft: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F3EEFF', alignItems: 'center', justifyContent: 'center' },
-  placeRank: { fontSize: 12, fontWeight: '800', color: '#8B5CF6' },
+  placeRankBadge: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#F3EEFF', alignItems: 'center', justifyContent: 'center',
+  },
+  placeRankBadgeFirst: { backgroundColor: '#8B5CF6' },
+  placeRank: { fontSize: 13, fontWeight: '800', color: '#8B5CF6' },
   placeCardBody: { flex: 1 },
-  placeNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
-  placeName: { fontSize: 14, fontWeight: '700', color: '#1C1C1E', flex: 1 },
-  typePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
+  placeNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' },
+  placeName: { fontSize: 15, fontWeight: '700', color: '#1C1C1E', flex: 1 },
+  typePill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   typePillTxt: { fontSize: 11, fontWeight: '700' },
-  placeAddr: { fontSize: 11, color: '#8E8E93', marginBottom: 3 },
-  placeDesc: { fontSize: 12, color: '#3A3A3C', lineHeight: 17, marginBottom: 5 },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
-  tagChip: { backgroundColor: '#F2F2F7', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
-  tagChipTxt: { fontSize: 10, color: '#8E8E93', fontWeight: '600' },
+  addrRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 4 },
+  placeAddr: { fontSize: 11, color: '#AEAEB2', flex: 1 },
+  placeDesc: { fontSize: 13, color: '#6B6B6B', lineHeight: 18, marginBottom: 6 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  tagChip: { backgroundColor: '#F5F0FF', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  tagChipTxt: { fontSize: 11, color: '#8B5CF6', fontWeight: '600' },
+  chevronWrap: {
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: '#F5F0FF', alignItems: 'center', justifyContent: 'center',
+  },
 
   inputBar: {
     flexDirection: 'row', alignItems: 'flex-end', gap: 10,
     paddingHorizontal: 16, paddingVertical: 10,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 10,
-    backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#F2F2F7',
+    paddingBottom: Platform.OS === 'ios' ? 30 : 12,
+    backgroundColor: 'white',
+    borderTopWidth: 1, borderTopColor: '#F0F0F5',
+  },
+  inputWrap: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F5F0FF', borderRadius: 24,
+    borderWidth: 1.5, borderColor: '#EEE8FF',
   },
   input: {
-    flex: 1, backgroundColor: '#F2F2F7', borderRadius: 20,
-    paddingHorizontal: 16, paddingVertical: 10,
+    flex: 1, paddingHorizontal: 12, paddingVertical: 12,
     fontSize: 15, color: '#1C1C1E', maxHeight: 100,
   },
   sendBtn: {
-    width: 40, height: 40, borderRadius: 20,
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: '#8B5CF6', justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 5,
   },
 });
