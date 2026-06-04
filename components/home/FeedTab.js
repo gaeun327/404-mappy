@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, ScrollView,
-  StyleSheet, ActivityIndicator, RefreshControl, SafeAreaView,
+  StyleSheet, ActivityIndicator, RefreshControl, SafeAreaView, TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../../firebaseConfig';
@@ -29,6 +29,8 @@ export default function FeedTab() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState('전체');
   const [activeCategory, setActiveCategory] = useState('전체');
+  const [searchText, setSearchText] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
 
   const fetchFeed = async () => {
     try {
@@ -69,7 +71,17 @@ export default function FeedTab() {
 
   const filteredData = feedData
     .filter(item => activeFilter === '전체' || (activeFilter === '추천' ? item.type === 'blue' : item.type === 'red'))
-    .filter(item => activeCategory === '전체' || item.category === activeCategory);
+    .filter(item => activeCategory === '전체' || item.category === activeCategory)
+    .filter(item => {
+      if (!searchText.trim()) return true;
+      const q = searchText.toLowerCase();
+      return (
+        (item.title ?? '').toLowerCase().includes(q) ||
+        (item.description ?? '').toLowerCase().includes(q) ||
+        (item.address ?? '').toLowerCase().includes(q) ||
+        (item.tags ?? []).some(t => t.toLowerCase().includes(q))
+      );
+    });
 
   const goToDetail = (item) => {
     router.push({
@@ -188,22 +200,37 @@ export default function FeedTab() {
             <Text style={styles.headerLabel}>FEED</Text>
             <Text style={styles.headerTitle}>피드</Text>
           </View>
-          <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
-              <Ionicons name="notifications-outline" size={22} color="#1C1C1E" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
-              <Ionicons name="search-outline" size={22} color="#1C1C1E" />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={[styles.iconBtn, isSearching && { backgroundColor: '#EAF3FF' }]} onPress={() => { setIsSearching(prev => !prev); setSearchText(''); }} activeOpacity={0.7}>
+            <Ionicons name={isSearching ? 'close' : 'search-outline'} size={22} color={isSearching ? '#007AFF' : '#1C1C1E'} />
+          </TouchableOpacity>
         </View>
+
+        {isSearching && (
+          <View style={styles.searchBar}>
+            <Ionicons name="search-outline" size={16} color="#8E8E93" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="장소 이름, 태그, 주소 검색..."
+              placeholderTextColor="#C7C7CC"
+              value={searchText}
+              onChangeText={setSearchText}
+              autoFocus
+              returnKeyType="search"
+            />
+            {searchText.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchText('')}>
+                <Ionicons name="close-circle" size={16} color="#C7C7CC" />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         <View style={styles.filterRow}>
           {FILTER_OPTIONS.map(renderFilterPill)}
           <Text style={styles.resultCount}>{filteredData.length}개</Text>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 14, gap: 8, alignItems: 'center' }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={{ paddingHorizontal: 20, gap: 8, alignItems: 'center', height: 44 }}>
           {[
             { id: '전체',     label: '전체' },
             { id: 'food',     label: '🍽️ 음식점' },
@@ -270,7 +297,13 @@ const styles = StyleSheet.create({
   },
   headerLabel: { fontSize: 11, fontWeight: '700', color: '#007AFF', letterSpacing: 1.5, marginBottom: 2 },
   headerTitle: { fontSize: 24, fontWeight: '800', color: '#1C1C1E', letterSpacing: -0.5 },
-  headerIcons: { flexDirection: 'row', gap: 4 },
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
+    marginHorizontal: 20, marginBottom: 10,
+    borderWidth: 1.5, borderColor: '#E5E5EA',
+  },
+  searchInput: { flex: 1, fontSize: 15, color: '#1C1C1E' },
   iconBtn: {
     width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff',
     alignItems: 'center', justifyContent: 'center',
@@ -285,7 +318,7 @@ const styles = StyleSheet.create({
   },
   filterPillText: { fontSize: 13, fontWeight: '600', color: '#8E8E93' },
   resultCount: { marginLeft: 'auto', fontSize: 13, color: '#8E8E93', fontWeight: '500' },
-  categoryScroll: { marginTop: -6, flexGrow: 0 },
+  categoryScroll: { marginTop: -6, height: 44, marginBottom: 6 },
   categoryPill: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
