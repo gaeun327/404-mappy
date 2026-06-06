@@ -36,15 +36,26 @@ export default function FeedTab() {
 
   const fetchFeed = async () => {
     try {
+      const myUid = auth.currentUser?.uid;
       const myEmail = auth.currentUser?.email;
+      if (!myUid) return;
+
+      // 내 친구 목록 가져오기
+      const myDoc = await getDoc(doc(db, 'users', myUid));
+      const friendUids = myDoc.exists() ? (myDoc.data().friends ?? []) : [];
+      const allowedUids = [myUid, ...friendUids];
+
       const q = query(collection(db, 'places'), orderBy('createdAt', 'desc'));
       const snap = await getDocs(q);
-      const items = snap.docs.map(d => {
-        const data = d.data();
-        const likes = data.likes ?? [];
-        const bookmarks = data.bookmarks ?? [];
-        return { id: d.id, ...data, likeCount: likes.length, liked: myEmail ? likes.includes(myEmail) : false, bookmarks };
-      });
+      const items = snap.docs
+        .map(d => {
+          const data = d.data();
+          const likes = data.likes ?? [];
+          const bookmarks = data.bookmarks ?? [];
+          return { id: d.id, ...data, likeCount: likes.length, liked: myEmail ? likes.includes(myEmail) : false, bookmarks };
+        })
+        .filter(item => allowedUids.includes(item.userUid)); // 친구(+나) 글만
+
       setFeedData(items);
       loadThumbnails(items);
     } catch (e) {

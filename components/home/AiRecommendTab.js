@@ -4,8 +4,8 @@ import {
   SafeAreaView, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { db } from '../../firebaseConfig';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { db, auth } from '../../firebaseConfig';
+import { collection, getDocs, query, orderBy, doc, getDoc } from 'firebase/firestore';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 
@@ -50,9 +50,19 @@ export default function AiRecommendTab() {
   const fetchPlaces = async () => {
     setDataLoading(true);
     try {
+      const myUid = auth.currentUser?.uid;
+      if (!myUid) return;
+
+      const myDoc = await getDoc(doc(db, 'users', myUid));
+      const friendUids = myDoc.exists() ? (myDoc.data().friends ?? []) : [];
+      const allowedUids = [myUid, ...friendUids];
+
       const q = query(collection(db, 'places'), orderBy('createdAt', 'desc'));
       const snap = await getDocs(q);
-      setAllPlaces(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const filtered = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(p => allowedUids.includes(p.userUid));
+      setAllPlaces(filtered);
     } catch (e) { console.log('장소 불러오기 오류:', e); }
     finally { setDataLoading(false); }
   };

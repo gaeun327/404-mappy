@@ -193,6 +193,7 @@ export default function AddPlaceScreen() {
         imagePaths: [],
         userEmail: auth.currentUser?.email,
         userNickname: auth.currentUser?.displayName ?? '익명',
+        userUid: auth.currentUser?.uid,
         verified,
         createdAt: new Date(),
       });

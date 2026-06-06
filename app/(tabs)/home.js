@@ -6,8 +6,8 @@ import {
 import MapView, { PROVIDER_GOOGLE, Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { db } from '../../firebaseConfig';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { db, auth } from '../../firebaseConfig';
+import { collection, getDocs, query, orderBy, doc, getDoc } from 'firebase/firestore';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import { useRouter, useFocusEffect } from 'expo-router';
 
@@ -79,12 +79,24 @@ export default function HomeScreen() {
 
   const fetchPins = async () => {
     try {
+      const myUid = auth.currentUser?.uid;
+      if (!myUid) return;
+
+      // 내 친구 목록 가져오기
+      const myDoc = await getDoc(doc(db, 'users', myUid));
+      const friendUids = myDoc.exists() ? (myDoc.data().friends ?? []) : [];
+      // 나 포함
+      const allowedUids = [myUid, ...friendUids];
+
       const q = query(collection(db, 'places'), orderBy('createdAt', 'desc'));
       const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // 친구(+나) 글만 필터링
+      const data = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(p => allowedUids.includes(p.userUid));
+
       setAllPins(data);
       setPins(data);
-      // 위치 있으면 1km 내 개수, 없으면 전체
       if (userLocation) {
         const nearby = data.filter(p =>
           getDistance(userLocation.latitude, userLocation.longitude, p.latitude, p.longitude) <= 1000
