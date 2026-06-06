@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Alert, ActivityIndicator, ScrollView, SafeAreaView,
-  TextInput, Share, Clipboard,
+  TextInput, Share, Clipboard, Modal, FlatList,
 } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 import {
@@ -31,6 +31,9 @@ export default function MyPage() {
   // 유저 정보
   const [userData, setUserData] = useState(null);
   const [friends, setFriends] = useState([]); // { uid, nickname, email }
+
+  // 친구 목록 모달
+  const [friendsModal, setFriendsModal] = useState(false);
 
   // 친구 추가
   const [friendCode, setFriendCode] = useState('');
@@ -291,26 +294,59 @@ export default function MyPage() {
           )}
         </View>
 
-        {/* 친구 목록 */}
-        {friends.length > 0 && (
-          <View style={styles.friendsSection}>
-            <Text style={styles.sectionTitle}>친구 {friends.length}명</Text>
-            {friends.map(f => (
-              <View key={f.uid} style={styles.friendItem}>
-                <View style={styles.friendAvatar}>
-                  <Text style={styles.friendAvatarTxt}>{(f.nickname ?? '?')[0].toUpperCase()}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.friendName}>{f.nickname ?? '익명'}</Text>
-                  <Text style={styles.friendEmail}>{f.email}</Text>
-                </View>
-                <TouchableOpacity onPress={() => handleRemoveFriend(f.uid, f.nickname)}>
-                  <Ionicons name="person-remove-outline" size={18} color="#C7C7CC" />
-                </TouchableOpacity>
-              </View>
-            ))}
+        {/* 친구 목록 버튼 */}
+        <TouchableOpacity style={styles.friendsBtn} onPress={() => setFriendsModal(true)} activeOpacity={0.8}>
+          <View style={styles.friendsBtnLeft}>
+            <Ionicons name="people-outline" size={20} color="#007AFF" />
+            <Text style={styles.friendsBtnTxt}>친구 목록</Text>
           </View>
-        )}
+          <View style={styles.friendsBtnRight}>
+            <Text style={styles.friendsBtnCount}>{friends.length}명</Text>
+            <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+          </View>
+        </TouchableOpacity>
+
+        {/* 친구 목록 모달 */}
+        <Modal visible={friendsModal} animationType="slide" presentationStyle="pageSheet">
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalHeaderTitle}>친구 {friends.length}명</Text>
+              <TouchableOpacity onPress={() => setFriendsModal(false)}>
+                <Ionicons name="close" size={24} color="#1C1C1E" />
+              </TouchableOpacity>
+            </View>
+            {friends.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Ionicons name="people-outline" size={48} color="#C7C7CC" />
+                <Text style={styles.emptyText}>아직 친구가 없어요</Text>
+                <Text style={styles.emptySub}>초대코드로 친구를 추가해보세요!</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={friends}
+                keyExtractor={f => f.uid}
+                contentContainerStyle={{ padding: 16 }}
+                renderItem={({ item: f }) => (
+                  <View style={styles.friendItem}>
+                    <View style={styles.friendAvatar}>
+                      <Text style={styles.friendAvatarTxt}>{(f.nickname ?? '?')[0].toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.friendName}>{f.nickname ?? '익명'}</Text>
+                      <Text style={styles.friendEmail}>{f.email}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => {
+                      setFriendsModal(false);
+                      setTimeout(() => handleRemoveFriend(f.uid, f.nickname), 300);
+                    }}>
+                      <Ionicons name="person-remove-outline" size={18} color="#C7C7CC" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              />
+            )}
+          </SafeAreaView>
+        </Modal>
 
         {/* 탭 */}
         <View style={styles.tabRow}>
@@ -439,7 +475,18 @@ const styles = StyleSheet.create({
   friendSubmitBtn: { backgroundColor: '#007AFF', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10 },
   friendSubmitTxt: { color: 'white', fontWeight: '700', fontSize: 14 },
 
-  friendsSection: { marginHorizontal: 16, marginBottom: 12, backgroundColor: '#fff', borderRadius: 16, padding: 16 },
+  friendsBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: 16, marginBottom: 12, backgroundColor: '#fff',
+    borderRadius: 16, padding: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+  },
+  friendsBtnLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  friendsBtnTxt: { fontSize: 15, fontWeight: '700', color: '#1C1C1E' },
+  friendsBtnRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  friendsBtnCount: { fontSize: 14, fontWeight: '700', color: '#007AFF' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F2F2F7' },
+  modalHeaderTitle: { fontSize: 17, fontWeight: '800', color: '#1C1C1E' },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: '#1C1C1E', marginBottom: 12 },
   friendItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
   friendAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E6F1FB', alignItems: 'center', justifyContent: 'center' },

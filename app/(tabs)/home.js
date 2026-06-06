@@ -13,20 +13,46 @@ import { useRouter, useFocusEffect } from 'expo-router';
 
 const GOOGLE_MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
+const getDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
 export default function HomeScreen() {
   const router = useRouter();
   const mapRef = useRef(null);
+  const placesRef = useRef(null);
   const [pins, setPins] = useState([]);
   const [allPins, setAllPins] = useState([]);
   const [loading, setLoading] = useState(false);
   const [nearbyCount, setNearbyCount] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState('전체');
+  const [userLocation, setUserLocation] = useState(null);
+  const [mapReady, setMapReady] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       fetchPins();
+      initLocation();
     }, [])
   );
+
+  const initLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const loc = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = loc.coords;
+      setUserLocation({ latitude, longitude });
+      mapRef.current?.animateToRegion({
+        latitude, longitude, latitudeDelta: 0.01, longitudeDelta: 0.01,
+      }, 500);
+    } catch (e) {}
+  };
 
   const fetchPins = async () => {
     try {
@@ -35,7 +61,15 @@ export default function HomeScreen() {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setAllPins(data);
       setPins(data);
-      setNearbyCount(data.length);
+      // 위치 있으면 1km 내 개수, 없으면 전체
+      if (userLocation) {
+        const nearby = data.filter(p =>
+          getDistance(userLocation.latitude, userLocation.longitude, p.latitude, p.longitude) <= 1000
+        );
+        setNearbyCount(nearby.length);
+      } else {
+        setNearbyCount(data.length);
+      }
     } catch (e) { console.log('핀 불러오기 오류:', e); }
   };
 
@@ -43,10 +77,16 @@ export default function HomeScreen() {
     let { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') { Alert.alert('권한 거부', '위치 권한을 허용해야 합니다.'); return; }
     let userLoc = await Location.getCurrentPositionAsync({});
+    const { latitude, longitude } = userLoc.coords;
+    setUserLocation({ latitude, longitude });
     mapRef.current?.animateToRegion({
-      latitude: userLoc.coords.latitude, longitude: userLoc.coords.longitude,
-      latitudeDelta: 0.005, longitudeDelta: 0.005,
+      latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005,
     }, 1000);
+    // 1km 내 핀 개수 업데이트
+    const nearby = allPins.filter(p =>
+      getDistance(latitude, longitude, p.latitude, p.longitude) <= 1000
+    );
+    setNearbyCount(nearby.length);
   };
 
   const openAddPlace = async () => {
@@ -102,6 +142,7 @@ export default function HomeScreen() {
         ref={mapRef} style={styles.map} provider={PROVIDER_GOOGLE}
         showsUserLocation={true} onPress={() => Keyboard.dismiss()}
         onLongPress={handleMapLongPress}
+        onMapReady={() => setMapReady(true)}
         initialRegion={{ latitude: 37.5665, longitude: 126.9780, latitudeDelta: 0.05, longitudeDelta: 0.05 }}
       >
         {pins.map((pin) => (
@@ -117,18 +158,15 @@ export default function HomeScreen() {
 
       <View style={styles.topLayer}>
         <GooglePlacesAutocomplete
-          placeholder="어디로 갈까요?"
+          placeholder="장소를 검색하고 선택하세요"
           query={{ key: GOOGLE_MAPS_KEY, language: 'ko' }}
           onPress={(data, details = null) => {
             if (details) {
               const { lat, lng } = details.geometry.location;
               mapRef.current?.animateToRegion({
-                latitude: lat, longitude: lng, latitudeDelta: 0.005, longitudeDelta: 0.005
+                latitude: lat, longitude: lng, latitudeDelta: 0.01, longitudeDelta: 0.01
               }, 1000);
-              router.push({
-                pathname: '/addplace',
-                params: { latitude: lat, longitude: lng, address: data.description }
-              });
+              Keyboard.dismiss();
             }
           }}
           fetchDetails={true}
@@ -177,7 +215,7 @@ export default function HomeScreen() {
 
       <View style={styles.nearbyBanner}>
         <Ionicons name="location" size={14} color="#007AFF" />
-        <Text style={styles.nearbyText}>내 주변 <Text style={styles.nearbyCount}>{nearbyCount}개</Text>의 스팟</Text>
+        <Text style={styles.nearbyText}>1km 내 <Text style={styles.nearbyCount}>{nearbyCount}개</Text>의 스팟</Text>
       </View>
 
       <TouchableOpacity style={styles.addPinBtn} onPress={openAddPlace} disabled={loading}>

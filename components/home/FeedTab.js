@@ -9,7 +9,6 @@ import { collection, query, orderBy, getDocs, doc, updateDoc, arrayUnion, arrayR
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 
-// createdAt → "N분 전 / N시간 전 / N일 전" 변환
 const timeAgo = (createdAt) => {
   if (!createdAt) return '';
   const date = createdAt?.toDate ? createdAt.toDate() : new Date(createdAt);
@@ -156,7 +155,6 @@ export default function FeedTab() {
             <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
           ) : null}
 
-          {/* 주소 */}
           {item.address ? (
             <View style={styles.addressRow}>
               <Ionicons name="location-outline" size={12} color="#8E8E93" />
@@ -164,7 +162,6 @@ export default function FeedTab() {
             </View>
           ) : null}
 
-          {/* 태그 */}
           {item.tags?.length > 0 && (
             <View style={styles.tagRow}>
               {item.tags.slice(0, 3).map((tag, i) => (
@@ -195,16 +192,23 @@ export default function FeedTab() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+
+        {/* 헤더 */}
         <View style={styles.header}>
           <View>
             <Text style={styles.headerLabel}>FEED</Text>
             <Text style={styles.headerTitle}>피드</Text>
           </View>
-          <TouchableOpacity style={[styles.iconBtn, isSearching && { backgroundColor: '#EAF3FF' }]} onPress={() => { setIsSearching(prev => !prev); setSearchText(''); }} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={[styles.iconBtn, isSearching && { backgroundColor: '#EAF3FF' }]}
+            onPress={() => { setIsSearching(prev => !prev); setSearchText(''); }}
+            activeOpacity={0.7}
+          >
             <Ionicons name={isSearching ? 'close' : 'search-outline'} size={22} color={isSearching ? '#007AFF' : '#1C1C1E'} />
           </TouchableOpacity>
         </View>
 
+        {/* 검색창 */}
         {isSearching && (
           <View style={styles.searchBar}>
             <Ionicons name="search-outline" size={16} color="#8E8E93" />
@@ -225,41 +229,48 @@ export default function FeedTab() {
           </View>
         )}
 
-        <View style={styles.filterRow}>
-          {FILTER_OPTIONS.map(renderFilterPill)}
-          <Text style={styles.resultCount}>{filteredData.length}개</Text>
+        {/* 필터 + 카테고리 묶음 */}
+        <View style={styles.filterSection}>
+          <View style={styles.filterRow}>
+            {FILTER_OPTIONS.map(renderFilterPill)}
+            <Text style={styles.resultCount}>{filteredData.length}개</Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryContent}
+          >
+            {[
+              { id: '전체',     label: '전체' },
+              { id: 'food',     label: '🍽️ 음식점' },
+              { id: 'cafe',     label: '☕ 카페' },
+              { id: 'nature',   label: '🌿 자연·공원' },
+              { id: 'culture',  label: '🎨 문화·전시' },
+              { id: 'popup',    label: '🎪 팝업' },
+              { id: 'shop',     label: '🛍️ 쇼핑' },
+              { id: 'hospital', label: '🏥 병원·약국' },
+              { id: 'beauty',   label: '💇 미용' },
+              { id: 'parking',  label: '🚗 주차장' },
+              { id: 'stay',     label: '🏨 숙소' },
+              { id: 'fitness',  label: '🏋️ 운동' },
+              { id: 'study',    label: '📚 카공' },
+              { id: 'play',     label: '🎮 오락' },
+              { id: 'etc',      label: '📍 기타' },
+            ].map(cat => (
+              <TouchableOpacity
+                key={cat.id}
+                onPress={() => setActiveCategory(cat.id)}
+                style={[styles.categoryPill, activeCategory === cat.id && styles.categoryPillActive]}
+              >
+                <Text style={[styles.categoryPillTxt, activeCategory === cat.id && styles.categoryPillTxtActive]}>
+                  {cat.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={{ paddingHorizontal: 20, gap: 8, alignItems: 'center', height: 44 }}>
-          {[
-            { id: '전체',     label: '전체' },
-            { id: 'food',     label: '🍽️ 음식점' },
-            { id: 'cafe',     label: '☕ 카페' },
-            { id: 'nature',   label: '🌿 자연·공원' },
-            { id: 'culture',  label: '🎨 문화·전시' },
-            { id: 'popup',    label: '🎪 팝업' },
-            { id: 'shop',     label: '🛍️ 쇼핑' },
-            { id: 'hospital', label: '🏥 병원·약국' },
-            { id: 'beauty',   label: '💇 미용' },
-            { id: 'parking',  label: '🚗 주차장' },
-            { id: 'stay',     label: '🏨 숙소' },
-            { id: 'fitness',  label: '🏋️ 운동' },
-            { id: 'study',    label: '📚 카공' },
-            { id: 'play',     label: '🎮 오락' },
-            { id: 'etc',      label: '📍 기타' },
-          ].map(cat => (
-            <TouchableOpacity
-              key={cat.id}
-              onPress={() => setActiveCategory(cat.id)}
-              style={[styles.categoryPill, activeCategory === cat.id && styles.categoryPillActive]}
-            >
-              <Text style={[styles.categoryPillTxt, activeCategory === cat.id && styles.categoryPillTxtActive]}>
-                {cat.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
+        {/* 피드 목록 */}
         {loading ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color="#007AFF" />
@@ -297,20 +308,27 @@ const styles = StyleSheet.create({
   },
   headerLabel: { fontSize: 11, fontWeight: '700', color: '#007AFF', letterSpacing: 1.5, marginBottom: 2 },
   headerTitle: { fontSize: 24, fontWeight: '800', color: '#1C1C1E', letterSpacing: -0.5 },
+
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
-    marginHorizontal: 20, marginBottom: 10,
+    marginHorizontal: 20, marginBottom: 8,
     borderWidth: 1.5, borderColor: '#E5E5EA',
   },
   searchInput: { flex: 1, fontSize: 15, color: '#1C1C1E' },
+
   iconBtn: {
     width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff',
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
 
-  filterRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 14, gap: 8 },
+  filterSection: { backgroundColor: '#F2F2F7' },
+
+  filterRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, paddingBottom: 8, gap: 8,
+  },
   filterPill: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
@@ -318,9 +336,9 @@ const styles = StyleSheet.create({
   },
   filterPillText: { fontSize: 13, fontWeight: '600', color: '#8E8E93' },
   resultCount: { marginLeft: 'auto', fontSize: 13, color: '#8E8E93', fontWeight: '500' },
-  categoryScroll: { marginTop: -6, height: 44, marginBottom: 6 },
+
+  categoryContent: { paddingHorizontal: 20, paddingBottom: 10, gap: 8, alignItems: 'center' },
   categoryPill: {
-    flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
     backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#E5E5EA',
   },
@@ -328,7 +346,7 @@ const styles = StyleSheet.create({
   categoryPillTxt: { fontSize: 13, fontWeight: '600', color: '#8E8E93' },
   categoryPillTxtActive: { color: '#fff' },
 
-  listContent: { paddingHorizontal: 16, paddingBottom: 100 },
+  listContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 100 },
 
   card: {
     flexDirection: 'row', backgroundColor: '#fff', borderRadius: 18,
@@ -363,7 +381,7 @@ const styles = StyleSheet.create({
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   actionCount: { fontSize: 13, color: '#8E8E93', fontWeight: '500' },
 
-  emptyState: { alignItems: 'center', paddingTop: 80, gap: 8 },
+  emptyState: { alignItems: 'center', paddingTop: 40, gap: 8 },
   emptyText: { fontSize: 16, fontWeight: '700', color: '#8E8E93', marginTop: 8 },
   emptySubText: { fontSize: 13, color: '#AEAEB2' },
 });
