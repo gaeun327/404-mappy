@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import * as Location from 'expo-location';
 import { db, auth, storage } from '../firebaseConfig';
 import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -31,6 +32,15 @@ const PRESET_THEMES = ['🌸 벚꽃', '🍂 단풍', '❄️ 눈', '🌙 야경'
 const MAX_IMAGES = 10;
 const { width } = Dimensions.get('window');
 const GOOGLE_MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+const getDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
 
 export default function AddPlaceScreen() {
   const router = useRouter();
@@ -157,6 +167,18 @@ export default function AddPlaceScreen() {
     if (!pinTitle.trim()) return Alert.alert('알림', '장소 이름을 입력해주세요.');
     setLoading(true);
     try {
+      // 현재 위치와 등록 위치 거리 계산 (100m 이내면 인증)
+      let verified = false;
+      try {
+        const loc = await Location.getCurrentPositionAsync({});
+        const dist = getDistance(
+          loc.coords.latitude, loc.coords.longitude,
+          parseFloat(latitude), parseFloat(longitude)
+        );
+        verified = dist <= 100;
+        console.log('📍 거리:', dist, '인증:', verified);
+      } catch (e) {}
+
       const docRef = await addDoc(collection(db, 'places'), {
         title: pinTitle,
         description: pinDesc,
@@ -171,6 +193,7 @@ export default function AddPlaceScreen() {
         imagePaths: [],
         userEmail: auth.currentUser?.email,
         userNickname: auth.currentUser?.displayName ?? '익명',
+        verified,
         createdAt: new Date(),
       });
 

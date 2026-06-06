@@ -36,7 +36,7 @@ const CATEGORY_MAP = {
 
 export default function DetailScreen() {
   const router = useRouter();
-  const { id, title, description, type, user, userEmail, address, detailAddress, imagePaths, tags, category, scrollToComment } = useLocalSearchParams();
+  const { id, title, description, type, user, userEmail, address, detailAddress, imagePaths, tags, category, scrollToComment, verified } = useLocalSearchParams();
   const scrollRef = useRef(null);
 
   const [imageUrls, setImageUrls] = useState([]);
@@ -46,18 +46,15 @@ export default function DetailScreen() {
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
 
-  // 좋아요
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [likeLoading, setLikeLoading] = useState(false);
 
-  // 댓글
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [commentLoading, setCommentLoading] = useState(false);
   const [commentSubmitting, setCommentSubmitting] = useState(false);
 
-  // 등록일
   const [createdAt, setCreatedAt] = useState(null);
   const [myNickname, setMyNickname] = useState('');
 
@@ -82,7 +79,7 @@ export default function DetailScreen() {
         const urls = await Promise.all(parsedPaths.map(p => getDownloadURL(ref(storage, p))));
         setImageUrls(urls);
       }
-    } catch (e) { console.log('이미지 로드 오류:', e); }
+    } catch (e) {}
     finally { setImgLoading(false); }
   };
 
@@ -98,9 +95,7 @@ export default function DetailScreen() {
       setLiked(myEmail ? likes.includes(myEmail) : false);
       setLikeCount(likes.length);
       setCreatedAt(data.createdAt ?? null);
-    } catch (e) { console.log('장소 데이터 오류:', e); }
-
-    // 닉네임: displayName 우선, 없으면 Firestore users에서 가져오기
+    } catch (e) {}
     try {
       const displayName = auth.currentUser?.displayName;
       if (displayName) {
@@ -109,7 +104,7 @@ export default function DetailScreen() {
         const userSnap = await getDoc(doc(db, 'users', auth.currentUser.uid));
         if (userSnap.exists()) setMyNickname(userSnap.data().nickname ?? '익명');
       }
-    } catch (e) { console.log('닉네임 로드 오류:', e); }
+    } catch (e) {}
   };
 
   const loadComments = async () => {
@@ -119,7 +114,7 @@ export default function DetailScreen() {
       const q = query(collection(db, 'places', id, 'comments'), orderBy('createdAt', 'asc'));
       const snap = await getDocs(q);
       setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (e) { console.log('댓글 로드 오류:', e); }
+    } catch (e) {}
     finally { setCommentLoading(false); }
   };
 
@@ -135,7 +130,7 @@ export default function DetailScreen() {
         await updateDoc(placeRef, { bookmarks: arrayUnion(myEmail) });
         setBookmarked(true);
       }
-    } catch (e) { console.log('북마크 오류:', e); }
+    } catch (e) {}
     finally { setBookmarkLoading(false); }
   };
 
@@ -153,7 +148,7 @@ export default function DetailScreen() {
         setLiked(true);
         setLikeCount(prev => prev + 1);
       }
-    } catch (e) { console.log('좋아요 오류:', e); }
+    } catch (e) {}
     finally { setLikeLoading(false); }
   };
 
@@ -176,26 +171,23 @@ export default function DetailScreen() {
         userNickname: myNickname || auth.currentUser?.displayName || '익명',
         createdAt: serverTimestamp(),
       };
-      const ref = await addDoc(collection(db, 'places', id, 'comments'), newComment);
-      setComments(prev => [...prev, { id: ref.id, ...newComment, createdAt: { toDate: () => new Date() } }]);
+      const docRef = await addDoc(collection(db, 'places', id, 'comments'), newComment);
+      setComments(prev => [...prev, { id: docRef.id, ...newComment, createdAt: { toDate: () => new Date() } }]);
       setCommentText('');
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch (e) { console.log('댓글 오류:', e); }
+    } catch (e) {}
     finally { setCommentSubmitting(false); }
   };
 
   const deleteComment = (commentId) => {
     Alert.alert('댓글 삭제', '이 댓글을 삭제할까요?', [
       { text: '취소', style: 'cancel' },
-      {
-        text: '삭제', style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteDoc(doc(db, 'places', id, 'comments', commentId));
-            setComments(prev => prev.filter(c => c.id !== commentId));
-          } catch (e) { Alert.alert('오류', '삭제에 실패했어요.'); }
-        }
-      }
+      { text: '삭제', style: 'destructive', onPress: async () => {
+        try {
+          await deleteDoc(doc(db, 'places', id, 'comments', commentId));
+          setComments(prev => prev.filter(c => c.id !== commentId));
+        } catch (e) { Alert.alert('오류', '삭제에 실패했어요.'); }
+      }}
     ]);
   };
 
@@ -203,15 +195,12 @@ export default function DetailScreen() {
     setMenuVisible(false);
     Alert.alert('삭제', '이 장소를 삭제할까요?', [
       { text: '취소', style: 'cancel' },
-      {
-        text: '삭제', style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteDoc(doc(db, 'places', id));
-            router.back();
-          } catch (e) { Alert.alert('오류', '삭제에 실패했어요.'); }
-        }
-      }
+      { text: '삭제', style: 'destructive', onPress: async () => {
+        try {
+          await deleteDoc(doc(db, 'places', id));
+          router.back();
+        } catch (e) { Alert.alert('오류', '삭제에 실패했어요.'); }
+      }}
     ]);
   };
 
@@ -233,7 +222,7 @@ export default function DetailScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
-      {/* 사진 고정 영역 */}
+      {/* 사진 영역 */}
       <View style={styles.heroContainer}>
         {imgLoading ? (
           <View style={styles.heroLoading}>
@@ -248,11 +237,9 @@ export default function DetailScreen() {
             renderItem={({ item }) => <Image source={item} style={styles.heroImage} contentFit="cover" />}
           />
         )}
-
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={22} color="#1C1C1E" />
         </TouchableOpacity>
-
         <View style={styles.topRight}>
           <TouchableOpacity style={styles.iconBtn} onPress={toggleBookmark} disabled={bookmarkLoading}>
             {bookmarkLoading
@@ -266,7 +253,6 @@ export default function DetailScreen() {
             </TouchableOpacity>
           )}
         </View>
-
         {displayImages.length > 1 && (
           <View style={styles.counter}>
             <Text style={styles.counterTxt}>{currentIndex + 1} / {displayImages.length}</Text>
@@ -292,22 +278,25 @@ export default function DetailScreen() {
       >
         <View style={styles.contentBox}>
 
-          {/* 타이틀 + 유형 배지 */}
+          {/* 배지: 추천 ←→ 방문인증 */}
           <View style={styles.titleRow}>
             <View style={[styles.typeBadge, { backgroundColor: isGood ? '#007AFF' : '#FF3B30' }]}>
               <Text style={styles.typeBadgeTxt}>{isGood ? '👍 추천' : '👎 비추천'}</Text>
             </View>
-            {category && CATEGORY_MAP[category] ? (
-              <View style={styles.categoryBadge}>
-                <Text style={styles.categoryBadgeTxt}>{CATEGORY_MAP[category]}</Text>
+            {verified === 'true' && (
+              <View style={styles.verifiedBadge}>
+                <Ionicons name="checkmark-circle" size={13} color="#34C759" />
+                <Text style={styles.verifiedTxt}>방문 인증</Text>
               </View>
-            ) : null}
+            )}
           </View>
+
+          {/* 제목 */}
           <Text style={styles.titleTxt}>{title}</Text>
 
-          {/* 작성자 + 좋아요 한 줄 */}
+          {/* 작성자(탭하면 프로필) + 좋아요 */}
           <View style={styles.metaRow}>
-            <View style={styles.userRow}>
+            <TouchableOpacity style={styles.userRow} activeOpacity={0.7} onPress={() => goToUserProfile(userEmail, user)}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarTxt}>
                   {user && user !== 'undefined' ? user.charAt(0).toUpperCase() : '?'}
@@ -321,7 +310,7 @@ export default function DetailScreen() {
                     : ''}
                 </Text>
               </View>
-            </View>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.likeBtn} onPress={toggleLike} disabled={likeLoading}>
               {likeLoading
                 ? <ActivityIndicator size="small" color="#FF2D55" />
@@ -334,37 +323,33 @@ export default function DetailScreen() {
           <View style={styles.divider} />
 
           {/* 한줄 평 */}
-          {description ? (
-            <Text style={styles.reviewTxt}>{description}</Text>
-          ) : null}
+          {description ? <Text style={styles.reviewTxt}>{description}</Text> : null}
 
-          {/* 테마 태그 */}
-          {parsedTags.length > 0 && (
-            <>
-              <Text style={styles.tagSectionLabel}>테마</Text>
-              <View style={styles.tagRow}>
-                {parsedTags.map((tag, i) => (
-                  <View key={i} style={styles.tagChip}>
-                    <Text style={styles.tagChipTxt}>{tag}</Text>
-                  </View>
-                ))}
-              </View>
-            </>
-          )}
-
-          {/* 위치 + 유형 한 카드에 */}
-          <View style={styles.infoCard}>
-            {fullAddress ? (
+          {/* 위치 박스 */}
+          {fullAddress ? (
+            <View style={styles.infoCard}>
               <View style={styles.infoRow}>
                 <Ionicons name="location-outline" size={16} color="#007AFF" />
                 <Text style={styles.infoTxt}>{fullAddress}</Text>
               </View>
-            ) : null}
-            <View style={styles.infoRow}>
-              <Ionicons name={isGood ? 'thumbs-up-outline' : 'thumbs-down-outline'} size={16} color={isGood ? '#007AFF' : '#FF3B30'} />
-              <Text style={styles.infoTxt}>{isGood ? '추천 스팟' : '주의 스팟'}</Text>
             </View>
-          </View>
+          ) : null}
+
+          {/* 카테고리 + 테마 태그 한 줄 */}
+          {(category || parsedTags.length > 0) && (
+            <View style={styles.tagRow}>
+              {category && CATEGORY_MAP[category] && (
+                <View style={styles.tagChip}>
+                  <Text style={styles.tagChipTxt}>{CATEGORY_MAP[category]}</Text>
+                </View>
+              )}
+              {parsedTags.map((tag, i) => (
+                <View key={i} style={styles.tagChip}>
+                  <Text style={styles.tagChipTxt}>{tag}</Text>
+                </View>
+              ))}
+            </View>
+          )}
 
           <View style={styles.divider} />
 
@@ -373,7 +358,6 @@ export default function DetailScreen() {
             <Text style={styles.commentTitle}>
               댓글 <Text style={styles.commentCount}>{comments.length}</Text>
             </Text>
-
             {commentLoading ? (
               <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 16 }} />
             ) : comments.length === 0 ? (
@@ -488,16 +472,15 @@ const styles = StyleSheet.create({
   contentContainer: { paddingBottom: 20 },
   contentBox: { backgroundColor: 'white', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24 },
 
-  titleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  categoryBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, backgroundColor: '#F2F2F7' },
-  categoryBadgeTxt: { fontSize: 12, fontWeight: '600', color: '#3A3A3C' },
-  tagSectionLabel: { fontSize: 12, fontWeight: '700', color: '#8E8E93', marginBottom: 8 },
+  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   typeBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, alignSelf: 'flex-start' },
   typeBadgeTxt: { color: 'white', fontSize: 12, fontWeight: '700' },
+  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EDFAF4', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 10 },
+  verifiedTxt: { fontSize: 12, fontWeight: '700', color: '#34C759' },
 
-  titleTxt: { fontSize: 24, fontWeight: '800', color: '#1C1C1E', marginBottom: 14 },
+  titleTxt: { fontSize: 24, fontWeight: '800', color: '#1C1C1E', marginBottom: 6 },
 
-  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, marginTop: 10 },
   userRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E6F1FB', justifyContent: 'center', alignItems: 'center' },
   avatarTxt: { fontSize: 14, fontWeight: '700', color: '#185FA5' },
@@ -508,18 +491,16 @@ const styles = StyleSheet.create({
   likeBtnTxt: { fontSize: 14, fontWeight: '700', color: '#8E8E93' },
 
   divider: { height: 1, backgroundColor: '#F2F2F7', marginBottom: 20 },
-
   reviewTxt: { fontSize: 16, color: '#3A3A3C', lineHeight: 26, marginBottom: 16 },
 
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
   tagChip: { backgroundColor: '#F2F2F7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
   tagChipTxt: { fontSize: 13, color: '#3A3A3C', fontWeight: '600' },
 
-  infoCard: { backgroundColor: '#F8F8F8', borderRadius: 14, padding: 14, gap: 10, marginBottom: 20 },
+  infoCard: { backgroundColor: '#F8F8F8', borderRadius: 14, padding: 14, gap: 10, marginBottom: 16 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   infoTxt: { fontSize: 14, color: '#3A3A3C', fontWeight: '500', flex: 1 },
 
-  // 댓글 섹션
   commentSection: { paddingBottom: 12 },
   commentTitle: { fontSize: 16, fontWeight: '800', color: '#1C1C1E', marginBottom: 16 },
   commentCount: { color: '#007AFF' },
@@ -527,10 +508,7 @@ const styles = StyleSheet.create({
   noCommentTxt: { fontSize: 14, color: '#C7C7CC' },
 
   commentItem: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  commentAvatar: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: '#E6F1FB', justifyContent: 'center', alignItems: 'center',
-  },
+  commentAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E6F1FB', justifyContent: 'center', alignItems: 'center' },
   commentAvatarTxt: { fontSize: 13, fontWeight: '700', color: '#185FA5' },
   commentBody: { flex: 1 },
   commentHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
@@ -539,7 +517,6 @@ const styles = StyleSheet.create({
   commentDeleteBtn: { marginLeft: 'auto', padding: 2 },
   commentTxt: { fontSize: 14, color: '#3A3A3C', lineHeight: 20 },
 
-  // 댓글 입력창
   commentInputBar: {
     flexDirection: 'row', alignItems: 'flex-end', gap: 10,
     paddingHorizontal: 16, paddingVertical: 10,

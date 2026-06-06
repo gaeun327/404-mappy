@@ -133,6 +133,7 @@ export default function FeedTab() {
         imagePaths: encodeURIComponent(JSON.stringify(item.imagePaths ?? [])),
         tags: JSON.stringify(item.tags ?? []),
         category: item.category ?? '',
+        verified: item.verified ? 'true' : 'false',
       }
     });
   };
@@ -196,7 +197,15 @@ export default function FeedTab() {
             </View>
           </View>
 
-          <Text style={styles.cardTitle}>{item.title}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+            <Text style={styles.cardTitle}>{item.title}</Text>
+            {item.verified && (
+              <View style={styles.verifiedBadge}>
+                <Ionicons name="checkmark-circle" size={13} color="#34C759" />
+                <Text style={styles.verifiedTxt}>인증</Text>
+              </View>
+            )}
+          </View>
           {item.description ? (
             <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
           ) : null}
@@ -425,7 +434,9 @@ const styles = StyleSheet.create({
   tag: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   tagText: { fontSize: 12, fontWeight: '700' },
 
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#1C1C1E', marginBottom: 5, letterSpacing: -0.2 },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: '#1C1C1E', letterSpacing: -0.2 },
+  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#EDFAF4', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
+  verifiedTxt: { fontSize: 11, fontWeight: '700', color: '#34C759' },
   cardDesc: { fontSize: 14, color: '#3A3A3C', lineHeight: 20, marginBottom: 8 },
 
   addressRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
