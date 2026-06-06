@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity, Image,
   Alert, ActivityIndicator, ScrollView, SafeAreaView,
   TextInput, Share, Clipboard, Modal, FlatList,
 } from 'react-native';
@@ -48,8 +48,9 @@ export default function MyPage() {
     if (auth.currentUser) {
       fetchUserData();
       fetchMyPlaces();
+      if (activeTab === 'saved') fetchSavedPlaces();
     }
-  }, []));
+  }, [activeTab]));
 
   const fetchUserData = async () => {
     try {
@@ -99,7 +100,7 @@ export default function MyPage() {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    if (tab === 'saved' && savedPlaces.length === 0) fetchSavedPlaces();
+    if (tab === 'saved') fetchSavedPlaces();
   };
 
   // 초대코드 복사
@@ -127,7 +128,6 @@ export default function MyPage() {
     }
     setAddingFriend(true);
     try {
-      // 코드로 상대방 찾기
       const q = query(collection(db, 'users'), where('inviteCode', '==', code));
       const snap = await getDocs(q);
       if (snap.empty) {
@@ -138,13 +138,11 @@ export default function MyPage() {
       const friendUid = friendDoc.id;
       const myUid = auth.currentUser?.uid;
 
-      // 이미 친구인지 확인
       if ((userData?.friends ?? []).includes(friendUid)) {
         Alert.alert('알림', '이미 친구 목록에 있어요!');
         return;
       }
 
-      // 양쪽 다 friends 배열에 추가
       await updateDoc(doc(db, 'users', myUid), { friends: arrayUnion(friendUid) });
       await updateDoc(doc(db, 'users', friendUid), { friends: arrayUnion(myUid) });
 
@@ -152,7 +150,7 @@ export default function MyPage() {
       Alert.alert('친구 추가 완료! 🎉', `${friendNickname}님과 친구가 되었어요!`);
       setFriendCode('');
       setShowFriendInput(false);
-      fetchUserData(); // 친구 목록 새로고침
+      fetchUserData();
     } catch (e) {
       Alert.alert('오류', '친구 추가에 실패했어요.');
     } finally {
@@ -176,6 +174,25 @@ export default function MyPage() {
     ]);
   };
 
+  const goToDetail = (post) => {
+    router.push({
+      pathname: '/detail',
+      params: {
+        id: post.id,
+        title: post.title ?? '',
+        description: post.description ?? '',
+        type: post.type ?? 'blue',
+        user: post.userNickname ?? '',
+        userEmail: post.userEmail ?? '',
+        address: post.address ?? '',
+        detailAddress: post.detailAddress ?? '',
+        imagePaths: encodeURIComponent(JSON.stringify(post.imagePaths ?? [])),
+        tags: JSON.stringify(post.tags ?? []),
+        category: post.category ?? '',
+      }
+    });
+  };
+
   const handleDelete = async (placeId) => {
     Alert.alert('장소 삭제', '정말 이 기록을 삭제하시겠습니까?', [
       { text: '취소', style: 'cancel' },
@@ -195,10 +212,19 @@ export default function MyPage() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      
+      {/* 📍 동네 소통방 헤더 스타일을 완벽하게 이식한 새로운 마이페이지 헤더 */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>내 정보</Text>
-        <TouchableOpacity onPress={() => auth.signOut().then(() => router.replace('/'))} style={styles.logoutBtn}>
-          <Text style={styles.logoutText}>로그아웃</Text>
+        <View>
+          <Text style={styles.headerLabel}>MY PAGE</Text>
+          <Text style={styles.headerTitle}>마이페이지</Text>
+        </View>
+        <TouchableOpacity 
+          style={styles.addBtn} 
+          onPress={() => auth.signOut().then(() => router.replace('/'))} 
+          activeOpacity={0.8}
+        >
+          <Text style={styles.addBtnText}>로그아웃</Text>
         </TouchableOpacity>
       </View>
 
@@ -206,8 +232,17 @@ export default function MyPage() {
 
         {/* 프로필 카드 */}
         <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Ionicons name="person" size={32} color="#8B5CF6" />
+          <TouchableOpacity style={styles.editProfileBtn} onPress={() => router.push('/editprofile')}>
+            <Ionicons name="pencil-outline" size={16} color="#8E8E93" />
+          </TouchableOpacity>
+          <View style={styles.avatarEditWrap}>
+            {userData?.profileImageUrl ? (
+              <Image source={{ uri: userData.profileImageUrl }} style={styles.avatarImg} />
+            ) : (
+              <View style={styles.avatar}>
+                <Ionicons name="person" size={32} color="#8B5CF6" />
+              </View>
+            )}
           </View>
           <View style={[styles.levelBadge, { backgroundColor: level.color }]}>
             <Text style={styles.levelText}>{level.name}</Text>
@@ -227,18 +262,13 @@ export default function MyPage() {
 
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
-              <Text style={styles.statVal}>{myPlaces.length}</Text>
+              <Text style={[styles.statVal, { color: '#007AFF' }]}>{myPlaces.length}</Text>
               <Text style={styles.statLabel}>등록 장소</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
-              <Text style={[styles.statVal, { color: '#007AFF' }]}>{friends.length}</Text>
+              <Text style={[styles.statVal, { color: '#F59E0B' }]}>{friends.length}</Text>
               <Text style={styles.statLabel}>친구</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={[styles.statVal, { color: '#F59E0B' }]}>{myPlaces.length * 100}P</Text>
-              <Text style={styles.statLabel}>포인트</Text>
             </View>
           </View>
         </View>
@@ -378,18 +408,18 @@ export default function MyPage() {
               </View>
             ) : (
               myPlaces.map(post => (
-                <View key={post.id} style={styles.postCard}>
+                <TouchableOpacity key={post.id} style={styles.postCard} onPress={() => goToDetail(post)} activeOpacity={0.8}>
                   <View style={[styles.postAccent, { backgroundColor: post.type === 'blue' ? '#007AFF' : '#FF3B30' }]} />
                   <View style={styles.postBody}>
                     <Text style={styles.postTitle}>{post.title}</Text>
                     {post.description ? <Text style={styles.postDesc} numberOfLines={2}>{post.description}</Text> : null}
                     {post.address ? <Text style={styles.postAddress}>📍 {post.address}</Text> : null}
-                    <TouchableOpacity onPress={() => handleDelete(post.id)} style={styles.deleteBtn}>
+                    <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); handleDelete(post.id); }} style={styles.deleteBtn}>
                       <Ionicons name="trash-outline" size={15} color="#FF3B30" />
                       <Text style={styles.deleteBtnText}>삭제</Text>
                     </TouchableOpacity>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))
             )}
           </View>
@@ -408,14 +438,14 @@ export default function MyPage() {
               </View>
             ) : (
               savedPlaces.map(post => (
-                <View key={post.id} style={styles.postCard}>
+                <TouchableOpacity key={post.id} style={styles.postCard} onPress={() => goToDetail(post)} activeOpacity={0.8}>
                   <View style={[styles.postAccent, { backgroundColor: post.type === 'blue' ? '#007AFF' : '#FF3B30' }]} />
                   <View style={styles.postBody}>
                     <Text style={styles.postTitle}>{post.title}</Text>
                     {post.description ? <Text style={styles.postDesc} numberOfLines={2}>{post.description}</Text> : null}
                     {post.address ? <Text style={styles.postAddress}>📍 {post.address}</Text> : null}
                   </View>
-                </View>
+                </TouchableOpacity>
               ))
             )}
           </View>
@@ -429,20 +459,63 @@ export default function MyPage() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F2F2F7' },
   scrollContent: { paddingBottom: 40 },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 12,
-    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F2F2F7',
+
+  // ─── 💡 동네 소통방(CommunityTab)과 완벽하게 일치시킨 수치 대입 구역 ───
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 20, 
+    paddingTop: 16, 
+    paddingBottom: 12 
   },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: '#1C1C1E' },
-  logoutBtn: { paddingHorizontal: 4 },
-  logoutText: { color: '#FF3B30', fontSize: 14, fontWeight: '600' },
+  headerLabel: { 
+    fontSize: 11, 
+    fontWeight: '700', 
+    color: '#007AFF', 
+    letterSpacing: 1.5, 
+    marginBottom: 2 
+  },
+  headerTitle: { 
+    fontSize: 24, 
+    fontWeight: '800', 
+    color: '#1C1C1E', 
+    letterSpacing: -0.5 
+  },
+  addBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4, 
+    backgroundColor: '#1C1C1E', 
+    paddingHorizontal: 14, 
+    paddingVertical: 9, 
+    borderRadius: 20 
+  },
+  addBtnText: { 
+    color: '#fff', 
+    fontSize: 13, 
+    fontWeight: '700' 
+  },
+  // ─────────────────────────────────────────────────────────────
 
   profileCard: {
     backgroundColor: '#fff', margin: 16, borderRadius: 20, padding: 24, alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
   },
-  avatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#F3EEFF', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  avatarEditWrap: { position: 'relative', marginBottom: 10 },
+  avatarImg: { width: 70, height: 70, borderRadius: 35 },
+  avatarEditBadge: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: 'white',
+  },
+  editProfileBtn: {
+    position: 'absolute', top: 14, right: 14,
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: '#F2F2F7', alignItems: 'center', justifyContent: 'center',
+  },
+  avatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#F3EEFF', alignItems: 'center', justifyContent: 'center' },
   levelBadge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 12, marginBottom: 8 },
   levelText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   nickname: { fontSize: 17, fontWeight: '800', color: '#1C1C1E', marginBottom: 4 },

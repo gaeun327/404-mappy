@@ -77,7 +77,6 @@ export default function SignUpScreen() {
         email: email.toLowerCase(),
         nickname,
         createdAt: new Date(),
-        points: 0,
         level: "새싹 탐험가 🌱",
         inviteCode: generateInviteCode(),
         friends: [],

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator, Image, FlatList, Dimensions
+  ScrollView, Alert, ActivityIndicator, Image, FlatList, Dimensions, KeyboardAvoidingView, Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -97,7 +97,7 @@ export default function EditPlaceScreen() {
 
   const addCustomTag = () => {
     if (!customTag.trim()) return;
-    const tag = customTag.startsWith('#') ? customTag.trim() : `#${customTag.trim()}`;
+    const tag = customTag.trim();
     if (!selectedTags.includes(tag)) setSelectedTags(prev => [...prev, tag]);
     setCustomTag('');
   };
@@ -243,11 +243,12 @@ export default function EditPlaceScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
         <View style={styles.imageSection}>
           <FlatList
             data={imageList}
@@ -343,7 +344,7 @@ export default function EditPlaceScreen() {
         <View style={styles.customRow}>
           <TextInput
             style={[styles.input, { flex: 1, marginBottom: 0 }]}
-            placeholder="직접 입력 (예: 🌊 바다뷰)"
+            placeholder="직접 입력 (예: 바다뷰)"
             value={customTag} onChangeText={setCustomTag}
             onSubmitEditing={addCustomTag} returnKeyType="done"
           />
@@ -369,7 +370,8 @@ export default function EditPlaceScreen() {
         >
           {saving ? <ActivityIndicator color="white" /> : <Text style={styles.saveBtnTxt}>수정 완료</Text>}
         </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -387,7 +389,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#1C1C1E' },
   saveHeaderBtn: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
   saveHeaderTxt: { color: 'white', fontWeight: '700', fontSize: 14 },
-  content: { paddingTop: 20, paddingBottom: 40 },
+  content: { paddingTop: 20, paddingBottom: 300 },
   imageSection: { height: 160, marginBottom: 20, paddingLeft: 24 },
   emptyImageBtn: {
     width: width - 48, height: 150, borderRadius: 16,

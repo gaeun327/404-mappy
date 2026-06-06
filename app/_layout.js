@@ -28,6 +28,8 @@ export default function RootLayout() {
         <Stack.Screen name="addplace" />
         <Stack.Screen name="editplace" />
         <Stack.Screen name="chat" />
+        <Stack.Screen name="editprofile" />
+        <Stack.Screen name="userprofile" />
       </Stack>
       {isLoggedIn && <InAppNotification />}
     </View>

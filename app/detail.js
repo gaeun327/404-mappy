@@ -10,7 +10,7 @@ import { storage, db, auth } from '../firebaseConfig';
 import { ref, getDownloadURL } from 'firebase/storage';
 import {
   doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc,
-  collection, addDoc, getDocs, orderBy, query, serverTimestamp,
+  collection, addDoc, getDocs, orderBy, query, where, serverTimestamp,
 } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -36,7 +36,7 @@ const CATEGORY_MAP = {
 
 export default function DetailScreen() {
   const router = useRouter();
-  const { id, title, description, type, user, userEmail, address, detailAddress, imagePaths, tags, category } = useLocalSearchParams();
+  const { id, title, description, type, user, userEmail, address, detailAddress, imagePaths, tags, category, scrollToComment } = useLocalSearchParams();
   const scrollRef = useRef(null);
 
   const [imageUrls, setImageUrls] = useState([]);
@@ -71,6 +71,9 @@ export default function DetailScreen() {
     loadImages();
     loadPlaceData();
     loadComments();
+    if (scrollToComment === 'true') {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 800);
+    }
   }, []);
 
   const loadImages = async () => {
@@ -152,6 +155,14 @@ export default function DetailScreen() {
       }
     } catch (e) { console.log('좋아요 오류:', e); }
     finally { setLikeLoading(false); }
+  };
+
+  const goToUserProfile = async (email, nickname) => {
+    if (!email) return;
+    try {
+      const snap = await getDocs(query(collection(db, 'users'), where('email', '==', email)));
+      if (!snap.empty) router.push({ pathname: '/userprofile', params: { uid: snap.docs[0].id, nickname } });
+    } catch (e) {}
   };
 
   const submitComment = async () => {
@@ -372,14 +383,16 @@ export default function DetailScreen() {
             ) : (
               comments.map(comment => (
                 <View key={comment.id} style={styles.commentItem}>
-                  <View style={styles.commentAvatar}>
+                  <TouchableOpacity style={styles.commentAvatar} onPress={() => goToUserProfile(comment.userEmail, comment.userNickname)} activeOpacity={0.7}>
                     <Text style={styles.commentAvatarTxt}>
                       {(comment.userNickname ?? '?')[0].toUpperCase()}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                   <View style={styles.commentBody}>
                     <View style={styles.commentHeader}>
-                      <Text style={styles.commentNickname}>{comment.userNickname ?? '익명'}</Text>
+                      <TouchableOpacity onPress={() => goToUserProfile(comment.userEmail, comment.userNickname)} activeOpacity={0.7}>
+                        <Text style={styles.commentNickname}>{comment.userNickname ?? '익명'}</Text>
+                      </TouchableOpacity>
                       <Text style={styles.commentTime}>{timeAgo(comment.createdAt)}</Text>
                       {comment.userEmail === myEmail && (
                         <TouchableOpacity onPress={() => deleteComment(comment.id)} style={styles.commentDeleteBtn}>

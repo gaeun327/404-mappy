@@ -1,11 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, ScrollView,
-  StyleSheet, ActivityIndicator, RefreshControl, SafeAreaView, TextInput,
+  StyleSheet, ActivityIndicator, RefreshControl, SafeAreaView, TextInput, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../../firebaseConfig';
-import { collection, query, orderBy, getDocs, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, doc, updateDoc, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
+import { ref, getDownloadURL } from 'firebase/storage';
+import { storage } from '../../firebaseConfig';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -30,23 +32,41 @@ export default function FeedTab() {
   const [activeCategory, setActiveCategory] = useState('전체');
   const [searchText, setSearchText] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [thumbnails, setThumbnails] = useState({});
 
   const fetchFeed = async () => {
     try {
       const myEmail = auth.currentUser?.email;
       const q = query(collection(db, 'places'), orderBy('createdAt', 'desc'));
       const snap = await getDocs(q);
-      setFeedData(snap.docs.map(d => {
+      const items = snap.docs.map(d => {
         const data = d.data();
         const likes = data.likes ?? [];
-        return { id: d.id, ...data, likeCount: likes.length, liked: myEmail ? likes.includes(myEmail) : false };
-      }));
+        const bookmarks = data.bookmarks ?? [];
+        return { id: d.id, ...data, likeCount: likes.length, liked: myEmail ? likes.includes(myEmail) : false, bookmarks };
+      });
+      setFeedData(items);
+      loadThumbnails(items);
     } catch (e) {
       console.log('피드 불러오기 오류:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const loadThumbnails = async (data) => {
+    const newThumbs = {};
+    await Promise.all(data.map(async (item) => {
+      const path = item.imagePaths?.[0];
+      if (path) {
+        try {
+          const url = await getDownloadURL(ref(storage, path));
+          newThumbs[item.id] = url;
+        } catch (e) {}
+      }
+    }));
+    setThumbnails(prev => ({ ...prev, ...newThumbs }));
   };
 
   useFocusEffect(useCallback(() => { fetchFeed(); }, []));
@@ -65,6 +85,22 @@ export default function FeedTab() {
     } else {
       await updateDoc(placeRef, { likes: arrayUnion(myEmail) });
       setFeedData(prev => prev.map(d => d.id === itemId ? { ...d, liked: true, likeCount: d.likeCount + 1 } : d));
+    }
+  };
+
+  const toggleBookmark = async (itemId) => {
+    const myEmail = auth.currentUser?.email;
+    if (!myEmail) return;
+    const item = feedData.find(d => d.id === itemId);
+    if (!item) return;
+    const placeRef = doc(db, 'places', itemId);
+    const isBookmarked = (item.bookmarks ?? []).includes(myEmail);
+    if (isBookmarked) {
+      await updateDoc(placeRef, { bookmarks: arrayRemove(myEmail) });
+      setFeedData(prev => prev.map(d => d.id === itemId ? { ...d, bookmarks: (d.bookmarks ?? []).filter(e => e !== myEmail) } : d));
+    } else {
+      await updateDoc(placeRef, { bookmarks: arrayUnion(myEmail) });
+      setFeedData(prev => prev.map(d => d.id === itemId ? { ...d, bookmarks: [...(d.bookmarks ?? []), myEmail] } : d));
     }
   };
 
@@ -132,8 +168,18 @@ export default function FeedTab() {
       <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={() => goToDetail(item)}>
         <View style={[styles.cardAccentBar, { backgroundColor: accentColor }]} />
         <View style={styles.cardInner}>
+          {thumbnails[item.id] && (
+            <Image source={{ uri: thumbnails[item.id] }} style={styles.thumbnail} />
+          )}
           <View style={styles.cardHeader}>
-            <View style={styles.userRow}>
+            <TouchableOpacity style={styles.userRow} activeOpacity={0.7} onPress={async () => {
+                if (!item.userEmail) return;
+                try {
+                  const { getDocs, collection, query, where } = await import('firebase/firestore');
+                  const snap = await getDocs(query(collection(db, 'users'), where('email', '==', item.userEmail)));
+                  if (!snap.empty) router.push({ pathname: '/userprofile', params: { uid: snap.docs[0].id, nickname: item.userNickname } });
+                } catch (e) {}
+              }}>
               <View style={[styles.avatar, { backgroundColor: accentColor + '22' }]}>
                 <Text style={[styles.avatarText, { color: accentColor }]}>
                   {nickname === '익명' ? '?' : nickname[0].toUpperCase()}
@@ -143,7 +189,7 @@ export default function FeedTab() {
                 <Text style={styles.userName}>{nickname}</Text>
                 <Text style={styles.timeText}>{timeAgo(item.createdAt)}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
             <View style={[styles.tag, { backgroundColor: tagBg }]}>
               <Ionicons name={isRecommend ? 'thumbs-up' : 'alert-circle'} size={12} color={accentColor} />
               <Text style={[styles.tagText, { color: accentColor }]}>{isRecommend ? '추천' : '주의'}</Text>
@@ -177,11 +223,25 @@ export default function FeedTab() {
               <Ionicons name={item.liked ? 'heart' : 'heart-outline'} size={18} color={item.liked ? '#FF2D55' : '#8E8E93'} />
               {item.likeCount > 0 && <Text style={[styles.actionCount, item.liked && { color: '#FF2D55' }]}>{item.likeCount}</Text>}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={() => goToDetail(item)}>
+            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={() => router.push({
+              pathname: '/detail',
+              params: {
+                id: item.id, title: item.title, description: item.description,
+                type: item.type, user: item.userNickname, userEmail: item.userEmail ?? '',
+                address: item.address ?? '', detailAddress: item.detailAddress ?? '',
+                imagePaths: encodeURIComponent(JSON.stringify(item.imagePaths ?? [])),
+                tags: JSON.stringify(item.tags ?? []), category: item.category ?? '',
+                scrollToComment: 'true',
+              }
+            })}>
               <Ionicons name="chatbubble-outline" size={17} color="#8E8E93" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-              <Ionicons name="bookmark-outline" size={17} color="#8E8E93" />
+            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={() => toggleBookmark(item.id)}>
+              <Ionicons
+                name={(item.bookmarks ?? []).includes(auth.currentUser?.email) ? 'bookmark' : 'bookmark-outline'}
+                size={17}
+                color={(item.bookmarks ?? []).includes(auth.currentUser?.email) ? '#007AFF' : '#8E8E93'}
+              />
             </TouchableOpacity>
           </View>
         </View>
@@ -354,6 +414,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 10, elevation: 3,
   },
   cardAccentBar: { width: 4, borderTopLeftRadius: 18, borderBottomLeftRadius: 18 },
+  thumbnail: { width: '100%', height: 160, borderRadius: 12, marginBottom: 10, resizeMode: 'cover' },
   cardInner: { flex: 1, padding: 14 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   userRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

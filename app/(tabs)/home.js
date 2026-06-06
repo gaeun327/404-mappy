@@ -22,6 +22,23 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+const CATEGORY_ICONS = {
+  food:     { icon: 'restaurant',     color: '#FF6B35' },
+  cafe:     { icon: 'cafe',           color: '#8B5CF6' },
+  nature:   { icon: 'leaf',           color: '#10B981' },
+  culture:  { icon: 'color-palette',  color: '#F59E0B' },
+  popup:    { icon: 'gift',           color: '#EC4899' },
+  shop:     { icon: 'bag-handle',     color: '#3B82F6' },
+  hospital: { icon: 'medical',        color: '#EF4444' },
+  beauty:   { icon: 'cut',            color: '#D946EF' },
+  parking:  { icon: 'car',            color: '#6B7280' },
+  stay:     { icon: 'bed',            color: '#0EA5E9' },
+  fitness:  { icon: 'barbell',        color: '#F97316' },
+  study:    { icon: 'book',           color: '#14B8A6' },
+  play:     { icon: 'game-controller', color: '#8B5CF6' },
+  etc:      { icon: 'location',       color: '#6B7280' },
+};
+
 export default function HomeScreen() {
   const router = useRouter();
   const mapRef = useRef(null);
@@ -51,6 +68,12 @@ export default function HomeScreen() {
       mapRef.current?.animateToRegion({
         latitude, longitude, latitudeDelta: 0.01, longitudeDelta: 0.01,
       }, 500);
+      // 위치 기준 1km 내 핀 카운트 즉시 업데이트
+      setAllPins(prev => {
+        const nearby = prev.filter(p => getDistance(latitude, longitude, p.latitude, p.longitude) <= 1000);
+        setNearbyCount(nearby.length);
+        return prev;
+      });
     } catch (e) {}
   };
 
@@ -68,7 +91,7 @@ export default function HomeScreen() {
         );
         setNearbyCount(nearby.length);
       } else {
-        setNearbyCount(data.length);
+        setNearbyCount(0);
       }
     } catch (e) { console.log('핀 불러오기 오류:', e); }
   };
@@ -149,10 +172,21 @@ export default function HomeScreen() {
           <Marker
             key={pin.id}
             coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
-            pinColor={pin.type === 'blue' ? '#007AFF' : '#FF3B30'}
             onPress={() => goToDetail(pin)}
             onCalloutPress={() => goToDetail(pin)}
-          />
+            tracksViewChanges={false}
+          >
+            <View style={[
+              styles.customMarker,
+              { backgroundColor: pin.type === 'blue' ? '#007AFF' : '#FF3B30' }
+            ]}>
+              <Ionicons
+                name={CATEGORY_ICONS[pin.category]?.icon ?? 'location'}
+                size={14}
+                color="white"
+              />
+            </View>
+          </Marker>
         ))}
       </MapView>
 
@@ -231,6 +265,13 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  customMarker: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
+    borderWidth: 2, borderColor: 'white',
+  },
   map: { width: '100%', height: '100%' },
   topLayer: { position: 'absolute', top: 50, width: '100%', zIndex: 1 },
   searchBar: {
