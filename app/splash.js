@@ -51,20 +51,20 @@ export default function SplashScreen() {
       <View style={styles.adContainer}>
         <TouchableOpacity
           activeOpacity={0.9}
-          onPress={() => Linking.openURL('https://m.search.naver.com/search.naver?query=성수동맛집')}
+          onPress={() => Linking.openURL('https://www.netflix.com')}
           style={styles.adBox}
         >
           <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&q=80&w=1000' }}
+            source={{ uri: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&q=80&w=1000' }}
             style={styles.adImage}
             resizeMode="cover"
           />
           <View style={styles.adContent}>
             <View style={styles.adTitleRow}>
               <Text style={styles.adTag}>AD</Text>
-              <Text style={styles.adTitle}>[광고] 이번 주말 성수동 핫플 예약?</Text>
+              <Text style={styles.adTitle}>[광고] 지금 가장 핫한 드라마, 무료 체험</Text>
             </View>
-            <Text style={styles.adDesc}>매피가 직접 검증한 프리미엄 맛집 지도</Text>
+            <Text style={styles.adDesc}>넷플릭스 30일 무료 — 지금 바로 시작하세요</Text>
           </View>
         </TouchableOpacity>
 
