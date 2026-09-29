@@ -31,7 +31,6 @@ const CATEGORIES = [
 const PRESET_THEMES = ['🌸 벚꽃', '🍂 단풍', '❄️ 눈', '🌙 야경', '💑 데이트', '🐶 애견', '👤 혼자', '👯 친구들과', '📸 뷰맛집', '💰 가성비'];
 const MAX_IMAGES = 10;
 const { width } = Dimensions.get('window');
-const GOOGLE_MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 const getDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371000;
@@ -59,44 +58,61 @@ export default function AddPlaceScreen() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const fetchAddress = async () => {
-      console.log('📍 paramAddress:', paramAddress);
-      console.log('📍 lat:', latitude, 'lng:', longitude);
-      console.log('📍 KEY 있음?', GOOGLE_MAPS_KEY ? '✅' : '❌');
+  const fetchAddress = async () => {
+    // 이미 주소를 전달받은 경우 그대로 사용
+    if (
+      paramAddress &&
+      paramAddress !== '현재 위치' &&
+      paramAddress !== '지도에서 선택한 위치'
+    ) {
+      setAddress(paramAddress);
+      setAddressLoading(false);
+      return;
+    }
 
-      if (paramAddress && paramAddress !== '현재 위치' && paramAddress !== '지도에서 선택한 위치') {
-        setAddress(paramAddress);
-        setAddressLoading(false);
+    try {
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+
+      if (isNaN(lat) || isNaN(lng)) {
+        setAddress('');
         return;
       }
 
-      try {
-        const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_KEY}&language=ko`;
-        console.log('🌐 요청 URL:', url);
-        const res = await fetch(url);
-        const data = await res.json();
-        console.log('📦 응답 status:', data.status);
-        console.log('📦 응답 주소:', data.results?.[0]?.formatted_address);
+      // expo-location으로 좌표 → 주소 변환
+      const results = await Location.reverseGeocodeAsync({
+        latitude: lat,
+        longitude: lng,
+      });
 
-        if (data.results && data.results.length > 0) {
-          // 도로명 주소 우선(street_address), 없으면 첫 번째 결과
-          const roadResult = data.results.find(r => r.types.includes('street_address'));
-          const best = roadResult ?? data.results[0];
-          // formatted_address에서 "대한민국 " 접두어만 제거
-          const formatted = best.formatted_address.replace(/^대한민국\s*/, '');
-          setAddress(formatted);
-        } else {
-          setAddress(paramAddress ?? '');
-        }
-      } catch (e) {
-        console.log('❌ fetch 오류:', e);
-        setAddress(paramAddress ?? '');
-      } finally {
-        setAddressLoading(false);
+      if (results.length > 0) {
+        const place = results[0];
+
+        const formattedAddress = [
+          place.region,
+          place.city,
+          place.district,
+          place.street,
+          place.streetNumber,
+        ]
+          .filter(Boolean)
+          .filter((value, index, array) => array.indexOf(value) === index)
+          .join(' ');
+
+        setAddress(formattedAddress);
+      } else {
+        setAddress('');
       }
-    };
-    fetchAddress();
-  }, []);
+    } catch (e) {
+      console.log('주소 변환 오류:', e);
+      setAddress(paramAddress ?? '');
+    } finally {
+      setAddressLoading(false);
+    }
+  };
+
+  fetchAddress();
+}, [latitude, longitude, paramAddress]);
 
   const toggleTag = (tag) => {
     setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
@@ -163,63 +179,117 @@ export default function AddPlaceScreen() {
     });
   };
 
-  const handleSave = async () => {
-    if (!pinTitle.trim()) return Alert.alert('알림', '장소 이름을 입력해주세요.');
-    setLoading(true);
+const handleSave = async () => {
+  if (!pinTitle.trim()) {
+    return Alert.alert('알림', '장소 이름을 입력해주세요.');
+  }
+
+  if (!category) {
+    return Alert.alert('알림', '카테고리를 선택해주세요.');
+  }
+
+  const lat = parseFloat(latitude);
+  const lng = parseFloat(longitude);
+
+  if (isNaN(lat) || isNaN(lng)) {
+    return Alert.alert(
+      '위치 오류',
+      '장소 위치를 확인할 수 없습니다. 지도에서 위치를 다시 선택해주세요.'
+    );
+  }
+
+  setLoading(true);
+
+  try {
+    // 현재 위치와 등록 위치 거리 계산 (100m 이내면 인증)
+    let verified = false;
+
     try {
-      // 현재 위치와 등록 위치 거리 계산 (100m 이내면 인증)
-      let verified = false;
-      try {
-        const loc = await Location.getCurrentPositionAsync({});
-        const dist = getDistance(
-          loc.coords.latitude, loc.coords.longitude,
-          parseFloat(latitude), parseFloat(longitude)
-        );
-        verified = dist <= 100;
-        console.log('📍 거리:', dist, '인증:', verified);
-      } catch (e) {}
+      const loc = await Location.getCurrentPositionAsync({});
 
-      const docRef = await addDoc(collection(db, 'places'), {
-        title: pinTitle,
-        description: pinDesc,
-        type: pinType,
-        category: category,
-        latitude: parseFloat(latitude),
-        longitude: parseFloat(longitude),
-        address: address,
-        detailAddress: detailAddress,
-        tags: selectedTags,
-        imageUrls: [],
-        imagePaths: [],
-        userEmail: auth.currentUser?.email,
-        userNickname: auth.currentUser?.displayName ?? '익명',
-        userUid: auth.currentUser?.uid,
-        verified,
-        createdAt: new Date(),
-      });
+      const dist = getDistance(
+        loc.coords.latitude,
+        loc.coords.longitude,
+        lat,
+        lng
+      );
 
-      if (selectedImages.length > 0) {
-        try {
-          const results = await Promise.all(
-            selectedImages.map((uri, i) => uploadImage(uri, docRef.id, i))
-          );
-          const imageUrls = results.map(r => r.url);
-          const imagePaths = results.map(r => r.path);
-          await updateDoc(doc(db, 'places', docRef.id), { imageUrls, imagePaths });
-        } catch (imgError) {
-          Alert.alert('알림', '장소는 등록됐는데 사진 업로드에 실패했어요.');
-          router.back();
-          return;
-        }
-      }
-
-      Alert.alert('완료', '장소가 등록되었습니다! 🎉', [
-        { text: '확인', onPress: () => router.back() }
-      ]);
+      verified = dist <= 100;
+      console.log('📍 거리:', dist, '인증:', verified);
     } catch (e) {
-      Alert.alert('오류', e.message ?? '저장에 실패했습니다.');
-    } finally { setLoading(false); }
-  };
+      console.log('현재 위치 확인 실패:', e);
+    }
+
+    // 장소 정보 저장
+    const docRef = await addDoc(collection(db, 'places'), {
+      title: pinTitle.trim(),
+      description: pinDesc,
+      type: pinType,
+      category: category,
+      latitude: lat,
+      longitude: lng,
+      address: address,
+      detailAddress: detailAddress,
+      tags: selectedTags,
+      imageUrls: [],
+      imagePaths: [],
+      userEmail: auth.currentUser?.email,
+      userNickname: auth.currentUser?.displayName ?? '익명',
+      userUid: auth.currentUser?.uid,
+      verified,
+      createdAt: new Date(),
+    });
+
+    // 이미지가 있으면 Storage에 업로드
+    if (selectedImages.length > 0) {
+      try {
+        const results = await Promise.all(
+          selectedImages.map((uri, i) =>
+            uploadImage(uri, docRef.id, i)
+          )
+        );
+
+        const imageUrls = results.map((r) => r.url);
+        const imagePaths = results.map((r) => r.path);
+
+        await updateDoc(doc(db, 'places', docRef.id), {
+          imageUrls,
+          imagePaths,
+        });
+      } catch (imgError) {
+        console.log('이미지 업로드 오류:', imgError);
+
+        Alert.alert(
+          '알림',
+          '장소는 등록됐는데 사진 업로드에 실패했어요.'
+        );
+
+        router.back();
+        return;
+      }
+    }
+
+    Alert.alert(
+      '완료',
+      '장소가 등록되었습니다! 🎉',
+      [
+        {
+          text: '확인',
+          onPress: () => router.back(),
+        },
+      ]
+    );
+  } catch (e) {
+    console.log('장소 등록 오류:', e);
+
+    Alert.alert(
+      '오류',
+      e.message ?? '저장에 실패했습니다.'
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <SafeAreaView style={styles.container}>
