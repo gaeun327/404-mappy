@@ -77,7 +77,7 @@ export default function AiRecommendTab() {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
     try {
-      // 피드 데이터를 Claude에게 컨텍스트로 전달
+      // 피드 데이터를 Gemini에게 컨텍스트로 전달
       const placesContext = allPlaces.slice(0, 50).map(p => ({
         id: p.id,
         title: p.title,
@@ -117,7 +117,29 @@ ${JSON.stringify(placesContext, null, 2)}
               { role: 'model', parts: [{ text: '네, 피드 데이터를 분석해서 JSON 형식으로 추천해드릴게요.' }] },
               { role: 'user', parts: [{ text: text.trim() }] },
             ],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 1000 },
+            generationConfig: {
+  temperature: 0.4,
+  maxOutputTokens: 1000,
+  responseMimeType: 'application/json',
+  responseSchema: {
+    type: 'OBJECT',
+    properties: {
+      message: {
+        type: 'STRING',
+      },
+      recommendedIds: {
+        type: 'ARRAY',
+        items: {
+          type: 'STRING',
+        },
+      },
+    },
+    required: [
+      'message',
+      'recommendedIds',
+    ],
+  },
+},
           }),
         }
       );
@@ -133,10 +155,13 @@ ${JSON.stringify(placesContext, null, 2)}
         const clean = raw.replace(/```json/g, '').replace(/```/g, '').trim();
         parsed = JSON.parse(clean);
       } catch (e) {
-        console.log('JSON 파싱 오류:', e, 'raw:', raw);
-        // JSON 파싱 실패시 raw 텍스트 그대로 메시지로
-        parsed.message = raw || '죄송해요, 다시 시도해주세요.';
-      }
+  console.log('JSON 파싱 오류:', e, 'raw:', raw);
+
+  parsed = {
+    message: '추천 결과를 불러오지 못했어요. 다시 한 번 질문해주세요!',
+    recommendedIds: [],
+  };
+}
 
       const recommendedPlaces = (parsed.recommendedIds ?? [])
         .map(id => allPlaces.find(p => p.id === id))

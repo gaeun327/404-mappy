@@ -265,10 +265,8 @@ await deleteDoc(placeRef);
     setMenuVisible(false);
     router.push({ pathname: '/editplace', params: { id } });
   };
-
-  const fallbackImage = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800';
-  const displayImages = imageUrls.length > 0 ? imageUrls : [fallbackImage];
-  const fullAddress = [
+    const hasImages = imageUrls.length >0;
+    const fullAddress = [
     address && address !== 'undefined' ? address : null,
     detailAddress && detailAddress !== 'undefined' && detailAddress !== '' ? detailAddress : null,
   ].filter(Boolean).join(' ');
@@ -279,50 +277,176 @@ await deleteDoc(placeRef);
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
-      {/* 사진 영역 */}
-      <View style={styles.heroContainer}>
-        {imgLoading ? (
-          <View style={styles.heroLoading}>
-            <ActivityIndicator color="white" size="large" />
-          </View>
-        ) : (
-          <FlatList
-            data={displayImages}
-            horizontal pagingEnabled showsHorizontalScrollIndicator={false}
-            keyExtractor={(_, i) => i.toString()}
-            onMomentumScrollEnd={(e) => setCurrentIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
-            renderItem={({ item }) => <Image source={item} style={styles.heroImage} contentFit="cover" />}
+      {/* 사진이 있을 때만 사진 영역 표시 */}
+{hasImages && (
+  <View style={styles.heroContainer}>
+    {imgLoading ? (
+      <View style={styles.heroLoading}>
+        <ActivityIndicator
+          color="white"
+          size="large"
+        />
+      </View>
+    ) : (
+      <FlatList
+        data={imageUrls}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={(_, i) => i.toString()}
+        onMomentumScrollEnd={(e) =>
+          setCurrentIndex(
+            Math.round(
+              e.nativeEvent.contentOffset.x / width
+            )
+          )
+        }
+        renderItem={({ item }) => (
+          <Image
+            source={item}
+            style={styles.heroImage}
+            contentFit="cover"
           />
         )}
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={22} color="#1C1C1E" />
-        </TouchableOpacity>
-        <View style={styles.topRight}>
-          <TouchableOpacity style={styles.iconBtn} onPress={toggleBookmark} disabled={bookmarkLoading}>
-            {bookmarkLoading
-              ? <ActivityIndicator size="small" color="#007AFF" />
-              : <Ionicons name={bookmarked ? 'bookmark' : 'bookmark-outline'} size={22} color={bookmarked ? '#007AFF' : '#1C1C1E'} />
+      />
+    )}
+
+    <TouchableOpacity
+      style={styles.backBtn}
+      onPress={() => router.back()}
+    >
+      <Ionicons
+        name="chevron-back"
+        size={22}
+        color="#1C1C1E"
+      />
+    </TouchableOpacity>
+
+    <View style={styles.topRight}>
+      <TouchableOpacity
+        style={styles.iconBtn}
+        onPress={toggleBookmark}
+        disabled={bookmarkLoading}
+      >
+        {bookmarkLoading ? (
+          <ActivityIndicator
+            size="small"
+            color="#007AFF"
+          />
+        ) : (
+          <Ionicons
+            name={
+              bookmarked
+                ? 'bookmark'
+                : 'bookmark-outline'
             }
-          </TouchableOpacity>
-          {isMyPost && (
-            <TouchableOpacity style={styles.iconBtn} onPress={() => setMenuVisible(true)}>
-              <Ionicons name="ellipsis-vertical" size={22} color="#1C1C1E" />
-            </TouchableOpacity>
-          )}
-        </View>
-        {displayImages.length > 1 && (
-          <View style={styles.counter}>
-            <Text style={styles.counterTxt}>{currentIndex + 1} / {displayImages.length}</Text>
-          </View>
+            size={22}
+            color={
+              bookmarked
+                ? '#007AFF'
+                : '#1C1C1E'
+            }
+          />
         )}
-        {displayImages.length > 1 && (
-          <View style={styles.dotRow}>
-            {displayImages.map((_, i) => (
-              <View key={i} style={[styles.dot, i === currentIndex && styles.dotActive]} />
-            ))}
-          </View>
-        )}
+      </TouchableOpacity>
+
+      {isMyPost && (
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={() =>
+            setMenuVisible(true)
+          }
+        >
+          <Ionicons
+            name="ellipsis-vertical"
+            size={22}
+            color="#1C1C1E"
+          />
+        </TouchableOpacity>
+      )}
+    </View>
+
+    {imageUrls.length > 1 && (
+      <View style={styles.counter}>
+        <Text style={styles.counterTxt}>
+          {currentIndex + 1} / {imageUrls.length}
+        </Text>
       </View>
+    )}
+
+    {imageUrls.length > 1 && (
+      <View style={styles.dotRow}>
+        {imageUrls.map((_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.dot,
+              i === currentIndex &&
+                styles.dotActive,
+            ]}
+          />
+        ))}
+      </View>
+    )}
+  </View>
+)}
+{/* 사진이 없을 때 상단 버튼 */}
+{!hasImages && (
+  <View style={styles.noImageHeader}>
+    <TouchableOpacity
+      style={styles.noImageIconBtn}
+      onPress={() => router.back()}
+    >
+      <Ionicons
+        name="chevron-back"
+        size={24}
+        color="#1C1C1E"
+      />
+    </TouchableOpacity>
+
+    <View style={styles.noImageHeaderRight}>
+      <TouchableOpacity
+        style={styles.noImageIconBtn}
+        onPress={toggleBookmark}
+        disabled={bookmarkLoading}
+      >
+        {bookmarkLoading ? (
+          <ActivityIndicator
+            size="small"
+            color="#007AFF"
+          />
+        ) : (
+          <Ionicons
+            name={
+              bookmarked
+                ? 'bookmark'
+                : 'bookmark-outline'
+            }
+            size={22}
+            color={
+              bookmarked
+                ? '#007AFF'
+                : '#1C1C1E'
+            }
+          />
+        )}
+      </TouchableOpacity>
+
+      {isMyPost && (
+        <TouchableOpacity
+          style={styles.noImageIconBtn}
+          onPress={() => setMenuVisible(true)}
+        >
+          <Ionicons
+            name="ellipsis-vertical"
+            size={22}
+            color="#1C1C1E"
+          />
+        </TouchableOpacity>
+      )}
+    </View>
+  </View>
+)}
 
       {/* 스크롤 콘텐츠 */}
       <ScrollView
@@ -498,6 +622,30 @@ await deleteDoc(placeRef);
 }
 
 const styles = StyleSheet.create({
+  noImageHeader: {
+  width: '100%',
+  paddingTop: 52,
+  paddingHorizontal: 16,
+  paddingBottom: 16,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  backgroundColor: 'white',
+},
+
+noImageHeaderRight: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
+},
+
+  noImageIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   container: { flex: 1, backgroundColor: 'white' },
 
   heroContainer: { width, height: height * 0.45, position: 'relative' },

@@ -1272,27 +1272,27 @@ const handleSearchPlacePress = () => {
               group.reviews[0];
 
             return (
-              <Marker
-                key={group.id}
+             <Marker
+  key={group.id}
 
-                coordinate={{
-                  latitude:
-                    group.latitude,
+  coordinate={{
+    latitude: group.latitude,
+    longitude: group.longitude,
+  }}
 
-                  longitude:
-                    group.longitude,
-                }}
+  onPress={() =>
+    handleGroupPress(group)
+  }
 
-                onPress={() =>
-                  handleGroupPress(
-                    group
-                  )
-                }
+  hitSlop={{
+    top: 15,
+    bottom: 15,
+    left: 15,
+    right: 15,
+  }}
 
-                tracksViewChanges={
-                  false
-                }
-              >
+  tracksViewChanges={false}
+>
 
                 <View
                   style={[
