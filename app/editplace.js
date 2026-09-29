@@ -164,51 +164,81 @@ export default function EditPlaceScreen() {
     });
   };
 
-  const handleSave = async () => {
-    if (!pinTitle.trim()) return Alert.alert('알림', '장소 이름을 입력해주세요.');
-    setSaving(true);
+ const handleSave = async () => {
+  // 장소 이름 필수 확인
+  if (!pinTitle.trim()) {
+    return Alert.alert('알림', '장소 이름을 입력해주세요.');
+  }
 
-    try {
-      // 새 이미지 업로드
-      let uploaded = [];
-      if (newImages.length > 0) {
-        uploaded = await Promise.all(newImages.map((uri, i) => uploadImage(uri, i)));
-      }
+  // 카테고리 필수 확인
+  if (!category) {
+    return Alert.alert('알림', '카테고리를 선택해주세요.');
+  }
 
-      // 최종 이미지 배열
-      const finalUrls = [...existingImages.map(img => img.url), ...uploaded.map(r => r.url)];
-      const finalPaths = [...existingImages.map(img => img.path), ...uploaded.map(r => r.path)];
+  setSaving(true);
 
-      // Firestore 업데이트
-      await updateDoc(doc(db, 'places', id), {
-        type: pinType,
-        title: pinTitle,
-        description: pinDesc,
-        category,
-        address,
-        detailAddress,
-        tags: selectedTags,
-        imageUrls: finalUrls,
-        imagePaths: finalPaths,
-        updatedAt: new Date(),
-      });
+  try {
+    // 새 이미지 업로드
+    let uploaded = [];
 
-      // 삭제된 이미지 Storage에서 제거 (실패해도 무시)
-      if (removedPaths.length > 0) {
-        await Promise.allSettled(
-          removedPaths.filter(p => p).map(p => deleteObject(ref(storage, p)))
-        );
-      }
-
-      Alert.alert('완료', '장소가 수정되었습니다! ✅', [
-        { text: '확인', onPress: () => router.back() }
-      ]);
-    } catch (e) {
-      Alert.alert('오류', e.message ?? '저장에 실패했습니다.');
-    } finally {
-      setSaving(false);
+    if (newImages.length > 0) {
+      uploaded = await Promise.all(
+        newImages.map((uri, i) => uploadImage(uri, i))
+      );
     }
-  };
+
+    // 최종 이미지 배열
+    const finalUrls = [
+      ...existingImages.map(img => img.url),
+      ...uploaded.map(r => r.url)
+    ];
+
+    const finalPaths = [
+      ...existingImages.map(img => img.path),
+      ...uploaded.map(r => r.path)
+    ];
+
+    // Firestore 업데이트
+    await updateDoc(doc(db, 'places', id), {
+      type: pinType,
+      title: pinTitle.trim(),
+      description: pinDesc,
+      category,
+      address,
+      detailAddress,
+      tags: selectedTags,
+      imageUrls: finalUrls,
+      imagePaths: finalPaths,
+      updatedAt: new Date(),
+    });
+
+    // 삭제한 이미지 Storage에서도 제거
+    if (removedPaths.length > 0) {
+      await Promise.allSettled(
+        removedPaths
+          .filter(p => p)
+          .map(p => deleteObject(ref(storage, p)))
+      );
+    }
+
+    Alert.alert('완료', '장소가 수정되었습니다! ✅', [
+      {
+        text: '확인',
+        onPress: () => router.back()
+      }
+    ]);
+
+  } catch (e) {
+    console.log('장소 수정 오류:', e);
+
+    Alert.alert(
+      '오류',
+      e.message ?? '저장에 실패했습니다.'
+    );
+  } finally {
+    setSaving(false);
+  }
+};
 
   if (loading) {
     return (
