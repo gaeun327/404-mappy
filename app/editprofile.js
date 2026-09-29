@@ -83,6 +83,23 @@ export default function EditProfileScreen() {
     try {
       const uid = auth.currentUser?.uid;
 
+      // 닉네임 중복 확인
+const nicknameQuery = query(
+  collection(db, 'users'),
+  where('nickname', '==', nickname.trim())
+);
+
+const nicknameSnap = await getDocs(nicknameQuery);
+
+const isDuplicateNickname = nicknameSnap.docs.some(
+  (userDoc) => userDoc.id !== uid
+);
+
+if (isDuplicateNickname) {
+  Alert.alert('중복', '이미 사용 중인 닉네임입니다.');
+  return;
+}
+
       // 1. 프로필 이미지 업로드
       let imageUrl = currentImageUrl;
       if (profileImage) {
