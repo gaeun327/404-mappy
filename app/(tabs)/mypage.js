@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Image,
   Alert, ActivityIndicator, ScrollView, SafeAreaView,
-  TextInput, Share, Clipboard, Modal, FlatList,
+  TextInput, Share, Modal, FlatList,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { auth, db } from '../../firebaseConfig';
 import {
   collection, query, where, getDocs, deleteDoc,
@@ -384,24 +385,36 @@ export default function MyPage() {
   // ============================================================
   // 내 초대코드 복사
   // ============================================================
-  const copyInviteCode = () => {
-    const code = userData?.inviteCode ?? '';
+const copyInviteCode = async () => {
+  const code = userData?.inviteCode ?? '';
 
-    if (!code) {
-      Alert.alert(
-        '알림',
-        '초대코드를 불러오는 중입니다.'
-      );
-      return;
-    }
+  if (!code) {
+    Alert.alert(
+      '알림',
+      '초대코드를 불러오는 중입니다.'
+    );
+    return;
+  }
 
-    Clipboard.setString(code);
+  try {
+    await Clipboard.setStringAsync(code);
 
     Alert.alert(
       '복사됨!',
       '초대코드 ' + code + '가 복사되었습니다.'
     );
-  };
+  } catch (e) {
+    console.log(
+      '초대코드 복사 오류:',
+      e
+    );
+
+    Alert.alert(
+      '오류',
+      '초대코드 복사에 실패했습니다.'
+    );
+  }
+};
 
 
   // ============================================================
