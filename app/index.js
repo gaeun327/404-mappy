@@ -28,7 +28,7 @@ export default function LoginScreen() {
 
     setBtnLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
       router.replace('/home');
     } catch (error) {
       let message = "이메일이나 비밀번호를 확인해주세요.";
