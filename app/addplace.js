@@ -43,10 +43,21 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
 
 export default function AddPlaceScreen() {
   const router = useRouter();
-  const { latitude, longitude, address: paramAddress } = useLocalSearchParams();
+const {
+  latitude,
+  longitude,
+  address: paramAddress,
+  placeName,
+  placeId,
+} = useLocalSearchParams();
 
-  const [pinType, setPinType] = useState('blue');
-  const [pinTitle, setPinTitle] = useState('');
+const [pinType, setPinType] = useState('blue');
+
+const [pinTitle, setPinTitle] = useState(
+  typeof placeName === 'string'
+    ? placeName
+    : ''
+);
   const [pinDesc, setPinDesc] = useState('');
   const [address, setAddress] = useState('');
   const [detailAddress, setDetailAddress] = useState('');
@@ -222,23 +233,41 @@ const handleSave = async () => {
 
     // 장소 정보 저장
     const docRef = await addDoc(collection(db, 'places'), {
-      title: pinTitle.trim(),
-      description: pinDesc,
-      type: pinType,
-      category: category,
-      latitude: lat,
-      longitude: lng,
-      address: address,
-      detailAddress: detailAddress,
-      tags: selectedTags,
-      imageUrls: [],
-      imagePaths: [],
-      userEmail: auth.currentUser?.email,
-      userNickname: auth.currentUser?.displayName ?? '익명',
-      userUid: auth.currentUser?.uid,
-      verified,
-      createdAt: new Date(),
-    });
+  title: pinTitle.trim(),
+  description: pinDesc,
+  type: pinType,
+  category: category,
+
+  latitude: lat,
+  longitude: lng,
+
+  address: address,
+  detailAddress: detailAddress,
+
+  // 카카오 장소 검색으로 들어온 경우 저장
+  kakaoPlaceId:
+    typeof placeId === 'string'
+      ? placeId
+      : '',
+
+  tags: selectedTags,
+
+  imageUrls: [],
+  imagePaths: [],
+
+  userEmail:
+    auth.currentUser?.email,
+
+  userNickname:
+    auth.currentUser?.displayName ?? '익명',
+
+  userUid:
+    auth.currentUser?.uid,
+
+  verified,
+
+  createdAt: new Date(),
+});
 
     // 이미지가 있으면 Storage에 업로드
     if (selectedImages.length > 0) {

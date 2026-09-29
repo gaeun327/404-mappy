@@ -63,12 +63,15 @@ export default function EditPlaceScreen() {
 
         const data = snap.data();
 
-        // 본인 글인지 확인
-        if (data.userEmail !== auth.currentUser?.email) {
-          Alert.alert('오류', '본인이 등록한 장소만 수정할 수 있습니다.');
-          router.back();
-          return;
-        }
+       // 본인 글인지 UID로 확인
+if (!auth.currentUser || data.userUid !== auth.currentUser.uid) {
+  Alert.alert(
+    '오류',
+    '본인이 등록한 장소만 수정할 수 있습니다.'
+  );
+  router.back();
+  return;
+}
 
         setPinType(data.type ?? 'blue');
         setPinTitle(data.title ?? '');

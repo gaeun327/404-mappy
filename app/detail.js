@@ -57,11 +57,18 @@ export default function DetailScreen() {
 
   const [createdAt, setCreatedAt] = useState(null);
   const [myNickname, setMyNickname] = useState('');
+  const [placeUserUid, setPlaceUserUid] = useState(null);
+  const [isVerified, setIsVerified] = useState(false);
 
   const parsedTags = tags ? JSON.parse(tags) : [];
   const parsedPaths = imagePaths ? JSON.parse(decodeURIComponent(imagePaths)) : [];
   const isGood = type === 'blue';
-  const isMyPost = !!auth.currentUser && auth.currentUser.email === userEmail;
+
+  const isMyPost =
+  !!auth.currentUser &&
+  !!placeUserUid &&
+  auth.currentUser.uid === placeUserUid;
+
   const myEmail = auth.currentUser?.email;
 
   useEffect(() => {
@@ -89,6 +96,7 @@ export default function DetailScreen() {
       const snap = await getDoc(doc(db, 'places', id));
       if (!snap.exists()) return;
       const data = snap.data();
+      setPlaceUserUid(data.userUid ?? null);
       const bookmarks = data.bookmarks ?? [];
       const likes = data.likes ?? [];
       setBookmarked(myEmail ? bookmarks.includes(myEmail) : false);
@@ -224,8 +232,19 @@ export default function DetailScreen() {
             );
           }
 
-          // Firestore 장소 문서 삭제
-          await deleteDoc(placeRef);
+    
+          // 장소에 달린 댓글 먼저 삭제
+const commentsRef = collection(db, 'places', id, 'comments');
+const commentsSnap = await getDocs(commentsRef);
+
+await Promise.all(
+  commentsSnap.docs.map((commentDoc) =>
+    deleteDoc(commentDoc.ref)
+  )
+);
+
+// Firestore 장소 문서 삭제
+await deleteDoc(placeRef);
 
           Alert.alert('완료', '장소가 삭제되었습니다.', [
             {
@@ -321,7 +340,7 @@ export default function DetailScreen() {
             <View style={[styles.typeBadge, { backgroundColor: isGood ? '#007AFF' : '#FF3B30' }]}>
               <Text style={styles.typeBadgeTxt}>{isGood ? '👍 추천' : '👎 비추천'}</Text>
             </View>
-            {verified === 'true' && (
+            {verified && (
               <View style={styles.verifiedBadge}>
                 <Ionicons name="checkmark-circle" size={13} color="#34C759" />
                 <Text style={styles.verifiedTxt}>방문 인증</Text>
