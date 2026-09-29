@@ -7,7 +7,7 @@ import {
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { storage, db, auth } from '../firebaseConfig';
-import { ref, getDownloadURL } from 'firebase/storage';
+import { ref, getDownloadURL, deleteObject } from 'firebase/storage';
 import {
   doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc,
   collection, addDoc, getDocs, orderBy, query, where, serverTimestamp,
@@ -192,17 +192,55 @@ export default function DetailScreen() {
   };
 
   const handleDelete = () => {
-    setMenuVisible(false);
-    Alert.alert('삭제', '이 장소를 삭제할까요?', [
-      { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: async () => {
+  setMenuVisible(false);
+
+  Alert.alert('삭제', '이 장소를 삭제할까요?', [
+    {
+      text: '취소',
+      style: 'cancel',
+    },
+    {
+      text: '삭제',
+      style: 'destructive',
+      onPress: async () => {
         try {
-          await deleteDoc(doc(db, 'places', id));
-          router.back();
-        } catch (e) { Alert.alert('오류', '삭제에 실패했어요.'); }
-      }}
-    ]);
-  };
+          // 장소 문서에서 실제 이미지 경로 가져오기
+          const placeRef = doc(db, 'places', id);
+          const placeSnap = await getDoc(placeRef);
+
+          if (placeSnap.exists()) {
+            const data = placeSnap.data();
+            const paths = data.imagePaths ?? [];
+
+            // Firebase Storage에 저장된 사진 삭제
+            await Promise.all(
+              paths.map(async (path) => {
+                try {
+                  await deleteObject(ref(storage, path));
+                } catch (e) {
+                  console.log('사진 삭제 실패:', path, e);
+                }
+              })
+            );
+          }
+
+          // Firestore 장소 문서 삭제
+          await deleteDoc(placeRef);
+
+          Alert.alert('완료', '장소가 삭제되었습니다.', [
+            {
+              text: '확인',
+              onPress: () => router.back(),
+            },
+          ]);
+        } catch (e) {
+          console.log('장소 삭제 오류:', e);
+          Alert.alert('오류', '삭제에 실패했어요.');
+        }
+      },
+    },
+  ]);
+};
 
   const handleEdit = () => {
     setMenuVisible(false);
