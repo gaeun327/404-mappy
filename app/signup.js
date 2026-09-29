@@ -15,6 +15,27 @@ const generateInviteCode = () => {
   for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
   return code;
 };
+const generateUniqueInviteCode = async () => {
+  let code = '';
+  let isUnique = false;
+
+  while (!isUnique) {
+    code = generateInviteCode();
+
+    const q = query(
+      collection(db, 'users'),
+      where('inviteCode', '==', code)
+    );
+
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      isUnique = true;
+    }
+  }
+
+  return code;
+};
 
 export default function SignUpScreen() {
   const router = useRouter();
@@ -73,12 +94,13 @@ export default function SignUpScreen() {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       await updateProfile(user, { displayName: nickname });
+      const inviteCode = await generateUniqueInviteCode();
       await setDoc(doc(db, "users", user.uid), {
         email: email.toLowerCase(),
         nickname,
         createdAt: new Date(),
         level: "새싹 탐험가 🌱",
-        inviteCode: generateInviteCode(),
+        inviteCode,
         friends: [],
       });
       Alert.alert("환영합니다!", `${nickname}님, 탐험을 시작해보세요!`);
