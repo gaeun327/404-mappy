@@ -9,7 +9,7 @@ import { collection, query, orderBy, getDocs, doc, updateDoc, arrayUnion, arrayR
 import { ref, getDownloadURL } from 'firebase/storage';
 import { storage } from '../../firebaseConfig';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 
 const timeAgo = (createdAt) => {
   if (!createdAt) return '';

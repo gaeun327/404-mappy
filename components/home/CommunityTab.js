@@ -10,7 +10,7 @@ import {
   collection, query, where, orderBy, getDocs, addDoc,
   onSnapshot, serverTimestamp, doc, getDoc,
 } from 'firebase/firestore';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 

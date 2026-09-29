@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 
 const getLevel = (count) => {
   if (count >= 50) return { name: '전설의 탐험가 👑', color: '#8B5CF6', next: null, max: 50 };

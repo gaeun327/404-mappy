@@ -3,7 +3,7 @@ import {
   StyleSheet, View, TouchableOpacity, Text,
   ScrollView, Alert, Keyboard, ActivityIndicator
 } from 'react-native';
-import MapView, { PROVIDER_GOOGLE, Marker } from 'react-native-maps';
+import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { db, auth } from '../../firebaseConfig';
@@ -62,7 +62,9 @@ export default function HomeScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
-      const loc = await Location.getCurrentPositionAsync({});
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
       const { latitude, longitude } = loc.coords;
       setUserLocation({ latitude, longitude });
       mapRef.current?.animateToRegion({
@@ -111,7 +113,20 @@ export default function HomeScreen() {
   const moveToUserLocation = async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') { Alert.alert('권한 거부', '위치 권한을 허용해야 합니다.'); return; }
-    let userLoc = await Location.getCurrentPositionAsync({});
+
+    // 캐시된 최근 위치가 있으면 먼저 즉시 이동 (빠른 반응)
+    const lastKnown = await Location.getLastKnownPositionAsync({});
+    if (lastKnown) {
+      const { latitude, longitude } = lastKnown.coords;
+      mapRef.current?.animateToRegion({
+        latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005,
+      }, 500);
+    }
+
+    // 이어서 정밀 위치로 업데이트
+    let userLoc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
     const { latitude, longitude } = userLoc.coords;
     setUserLocation({ latitude, longitude });
     mapRef.current?.animateToRegion({
@@ -174,7 +189,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <MapView
-        ref={mapRef} style={styles.map} provider={PROVIDER_GOOGLE}
+        ref={mapRef} style={styles.map}
         showsUserLocation={true} onPress={() => Keyboard.dismiss()}
         onLongPress={handleMapLongPress}
         onMapReady={() => setMapReady(true)}
@@ -205,7 +220,15 @@ export default function HomeScreen() {
       <View style={styles.topLayer}>
         <GooglePlacesAutocomplete
           placeholder="장소를 검색하고 선택하세요"
-          query={{ key: GOOGLE_MAPS_KEY, language: 'ko' }}
+          query={{
+            key: GOOGLE_MAPS_KEY,
+            language: 'ko',
+            ...(userLocation && {
+              location: `${userLocation.latitude},${userLocation.longitude}`,
+              radius: 30000,
+              origin: `${userLocation.latitude},${userLocation.longitude}`,
+            }),
+          }}
           onPress={(data, details = null) => {
             if (details) {
               const { lat, lng } = details.geometry.location;
