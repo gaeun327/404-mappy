@@ -464,7 +464,7 @@ await deleteDoc(placeRef);
             <View style={[styles.typeBadge, { backgroundColor: isGood ? '#007AFF' : '#FF3B30' }]}>
               <Text style={styles.typeBadgeTxt}>{isGood ? '👍 추천' : '👎 비추천'}</Text>
             </View>
-            {verified && (
+            {verified === 'true' && (
               <View style={styles.verifiedBadge}>
                 <Ionicons name="checkmark-circle" size={13} color="#34C759" />
                 <Text style={styles.verifiedTxt}>방문 인증</Text>

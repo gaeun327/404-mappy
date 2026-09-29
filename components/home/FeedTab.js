@@ -250,8 +250,10 @@ export default function FeedTab() {
                 type: item.type, user: item.userNickname, userEmail: item.userEmail ?? '',
                 address: item.address ?? '', detailAddress: item.detailAddress ?? '',
                 imagePaths: encodeURIComponent(JSON.stringify(item.imagePaths ?? [])),
-                tags: JSON.stringify(item.tags ?? []), category: item.category ?? '',
-                scrollToComment: 'true',
+                tags: JSON.stringify(item.tags ?? []),
+category: item.category ?? '',
+verified: item.verified ? 'true' : 'false',
+scrollToComment: 'true',
               }
             })}>
               <Ionicons name="chatbubble-outline" size={17} color="#8E8E93" />

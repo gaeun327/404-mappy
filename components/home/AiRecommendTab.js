@@ -119,7 +119,7 @@ ${JSON.stringify(placesContext, null, 2)}
             ],
             generationConfig: {
   temperature: 0.4,
-  maxOutputTokens: 1000,
+  maxOutputTokens: 2000,
   responseMimeType: 'application/json',
   responseSchema: {
     type: 'OBJECT',
@@ -146,8 +146,12 @@ ${JSON.stringify(placesContext, null, 2)}
 
       const data = await response.json();
       console.log('Gemini 응답:', JSON.stringify(data).slice(0, 300));
-      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
-      console.log('raw text:', raw);
+const raw = (
+  data.candidates?.[0]?.content?.parts ?? []
+)
+  .map(part => part.text ?? '')
+  .join('')
+  .trim();      console.log('raw text:', raw);
 
       let parsed = { message: '죄송해요, 추천을 찾지 못했어요.', recommendedIds: [] };
       try {
