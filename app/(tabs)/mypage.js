@@ -8,7 +8,7 @@ import * as Clipboard from 'expo-clipboard';
 import { auth, db } from '../../firebaseConfig';
 import {
   collection, query, where, getDocs, deleteDoc,
-  doc, getDoc, updateDoc, setDoc, arrayUnion, arrayRemove,
+  doc, getDoc, updateDoc, setDoc, arrayUnion, arrayRemove,onSnapshot,addDoc,serverTimestamp,
 } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -113,7 +113,36 @@ export default function MyPage() {
   const [savedPlaces, setSavedPlaces] = useState([]);
   const [savedLoading, setSavedLoading] = useState(false);
 
+  // 읽지 않은 알림 개수
+const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
+useEffect(() => {
+  const myUid = auth.currentUser?.uid;
+
+  if (!myUid) return;
+
+  const notificationQuery = query(
+    collection(db, 'notifications'),
+    where('recipientUid', '==', myUid)
+  );
+
+  const unsubscribe = onSnapshot(
+    notificationQuery,
+    (snapshot) => {
+      const unreadCount = snapshot.docs.filter(
+        (notificationDoc) =>
+          notificationDoc.data().read === false
+      ).length;
+
+      setUnreadNotificationCount(unreadCount);
+    },
+    (error) => {
+      console.log('알림 개수 불러오기 오류:', error);
+    }
+  );
+
+  return unsubscribe;
+}, []);
   // ============================================================
   // 마이페이지 진입 / 포커스 시 데이터 불러오기
   // ============================================================
@@ -524,6 +553,41 @@ const copyInviteCode = async () => {
         },
         { merge: true }
       );
+console.log('친구 알림 생성 체크:', {
+  myUid,
+  friendUid,
+  myNickname:
+    userData?.nickname ||
+    auth.currentUser?.displayName ||
+    '익명',
+});
+      // 상대방에게 친구 추가 알림
+await addDoc(
+  collection(db, 'notifications'),
+  {
+    recipientUid: friendUid,
+    senderUid: myUid,
+    senderEmail:
+      auth.currentUser?.email ?? '',
+    senderNickname:
+      userData?.nickname ||
+      auth.currentUser?.displayName ||
+      '익명',
+
+    type: 'friend',
+    title: '새 친구',
+
+    body: `${
+      userData?.nickname ||
+      auth.currentUser?.displayName ||
+      '누군가'
+    }님과 친구가 되었어요!`,
+
+    read: false,
+    createdAt: serverTimestamp(),
+  }
+);
+console.log('친구 알림 저장 성공');
 
       const friendNickname =
         friendDoc.data().nickname ?? '익명';
@@ -733,21 +797,53 @@ const copyInviteCode = async () => {
           </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() =>
-            auth
-              .signOut()
-              .then(() =>
-                router.replace('/')
-              )
-          }
-          activeOpacity={0.8}
-        >
-          <Text style={styles.addBtnText}>
-            로그아웃
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+
+  {/* 알림 버튼 */}
+  <TouchableOpacity
+    style={styles.notificationBtn}
+    onPress={() => router.push('/notifications')}
+    activeOpacity={0.8}
+  >
+    <Ionicons
+      name={
+        unreadNotificationCount > 0
+          ? 'notifications'
+          : 'notifications-outline'
+      }
+      size={23}
+      color="#1C1C1E"
+    />
+
+    {unreadNotificationCount > 0 && (
+      <View style={styles.notificationBadge}>
+        <Text style={styles.notificationBadgeText}>
+          {unreadNotificationCount > 99
+            ? '99+'
+            : unreadNotificationCount}
+        </Text>
+      </View>
+    )}
+  </TouchableOpacity>
+
+  {/* 로그아웃 */}
+  <TouchableOpacity
+    style={styles.addBtn}
+    onPress={() =>
+      auth
+        .signOut()
+        .then(() =>
+          router.replace('/')
+        )
+    }
+    activeOpacity={0.8}
+  >
+    <Text style={styles.addBtnText}>
+      로그아웃
+    </Text>
+  </TouchableOpacity>
+
+</View>
       </View>
 
 
@@ -1641,6 +1737,43 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     letterSpacing: -0.5,
   },
+
+  headerRight: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 10,
+},
+
+notificationBtn: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: '#FFFFFF',
+  alignItems: 'center',
+  justifyContent: 'center',
+  position: 'relative',
+},
+
+notificationBadge: {
+  position: 'absolute',
+  top: -2,
+  right: -3,
+  minWidth: 18,
+  height: 18,
+  paddingHorizontal: 4,
+  borderRadius: 9,
+  backgroundColor: '#FF3B30',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderWidth: 2,
+  borderColor: '#F2F2F7',
+},
+
+notificationBadgeText: {
+  color: '#FFFFFF',
+  fontSize: 9,
+  fontWeight: '800',
+},
 
   addBtn: {
     flexDirection: 'row',

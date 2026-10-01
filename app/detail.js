@@ -143,22 +143,113 @@ export default function DetailScreen() {
   };
 
   const toggleLike = async () => {
-    if (!myEmail || !id) return;
-    setLikeLoading(true);
-    try {
-      const placeRef = doc(db, 'places', id);
-      if (liked) {
-        await updateDoc(placeRef, { likes: arrayRemove(myEmail) });
-        setLiked(false);
-        setLikeCount(prev => prev - 1);
-      } else {
-        await updateDoc(placeRef, { likes: arrayUnion(myEmail) });
-        setLiked(true);
-        setLikeCount(prev => prev + 1);
-      }
-    } catch (e) {}
-    finally { setLikeLoading(false); }
-  };
+  if (!myEmail) {
+    Alert.alert(
+      '알림',
+      '로그인이 필요합니다.'
+    );
+    return;
+  }
+
+  try {
+    const placeRef = doc(
+      db,
+      'places',
+      id
+    );
+
+    // 현재 좋아요가 눌려 있는 상태라면 → 취소
+    if (liked) {
+      await updateDoc(placeRef, {
+        likes: arrayRemove(myEmail),
+      });
+
+      setLiked(false);
+
+      setLikeCount(prev =>
+        Math.max(prev - 1, 0)
+      );
+
+      // 좋아요 취소는 알림 생성 안 함
+      return;
+    }
+
+    // 좋아요 추가
+    await updateDoc(placeRef, {
+      likes: arrayUnion(myEmail),
+    });
+
+    setLiked(true);
+    setLikeCount(prev => prev + 1);
+
+    // ==========================================
+    // 다른 사람의 글일 때만 좋아요 알림 생성
+    // ==========================================
+    console.log('좋아요 알림 생성 체크:', {
+  placeUserUid,
+  currentUid: auth.currentUser?.uid,
+  liked,
+  sameUser:
+    placeUserUid === auth.currentUser?.uid,
+});
+    if (
+      placeUserUid &&
+      auth.currentUser?.uid &&
+      placeUserUid !== auth.currentUser.uid
+    ) {
+      await addDoc(
+        collection(db, 'notifications'),
+        {
+          recipientUid: placeUserUid,
+
+          senderUid:
+            auth.currentUser.uid,
+
+          senderEmail:
+            myEmail,
+
+          senderNickname:
+            myNickname ||
+            auth.currentUser?.displayName ||
+            '익명',
+
+          type: 'like',
+
+          title: '새 좋아요',
+
+          body: `${
+            myNickname ||
+            auth.currentUser?.displayName ||
+            '누군가'
+          }님이 회원님의 장소를 좋아해요`,
+
+          placeId: id,
+
+          placeTitle:
+            title &&
+            title !== 'undefined'
+              ? title
+              : '장소',
+
+          read: false,
+
+          createdAt: serverTimestamp(),
+        }
+      );
+    }
+
+  } catch (e) {
+    console.log(
+      '좋아요/알림 처리 오류:',
+      e
+    );
+
+    Alert.alert(
+      '오류',
+      '좋아요 처리 중 문제가 발생했어요.'
+    );
+  }
+};
 
   const goToUserProfile = async (email, nickname) => {
     if (!email) return;
@@ -180,10 +271,60 @@ export default function DetailScreen() {
         createdAt: serverTimestamp(),
       };
       const docRef = await addDoc(collection(db, 'places', id, 'comments'), newComment);
+      // 내 글이 아닌 경우 글 작성자에게 댓글 알림 저장
+      console.log('알림 생성 체크:', {
+  placeUserUid,
+  currentUid: auth.currentUser?.uid,
+  sameUser:
+    placeUserUid === auth.currentUser?.uid,
+});
+if (
+  placeUserUid &&
+  auth.currentUser?.uid &&
+  placeUserUid !== auth.currentUser.uid
+) {
+  await addDoc(collection(db, 'notifications'), {
+    recipientUid: placeUserUid,
+
+    senderUid: auth.currentUser.uid,
+    senderEmail: myEmail,
+    senderNickname:
+      myNickname ||
+      auth.currentUser?.displayName ||
+      '익명',
+
+    type: 'comment',
+
+    title: '새 댓글',
+    body: `${
+      myNickname ||
+      auth.currentUser?.displayName ||
+      '누군가'
+    }님이 댓글을 남겼어요`,
+
+    placeId: id,
+    placeTitle:
+      title && title !== 'undefined'
+        ? title
+        : '장소',
+
+    commentId: docRef.id,
+    commentText: commentText.trim(),
+
+    read: false,
+    createdAt: serverTimestamp(),
+  });
+}
       setComments(prev => [...prev, { id: docRef.id, ...newComment, createdAt: { toDate: () => new Date() } }]);
       setCommentText('');
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch (e) {}
+    } catch (e) {
+      console.log('댓글/알림 저장 오류:',e);
+      Alert.alert(
+        '오류',
+        '댓글 또는 알림 저장 중 오류가 발생했어요.'
+      );
+    }
     finally { setCommentSubmitting(false); }
   };
 
