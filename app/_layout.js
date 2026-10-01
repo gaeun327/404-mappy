@@ -12,8 +12,14 @@ export default function RootLayout() {
 
   useEffect(() => {
     const timer = setTimeout(() => setIsReady(true), 4500);
-    const unsub = onAuthStateChanged(auth, (user) => setIsLoggedIn(!!user));
-    return () => { clearTimeout(timer); unsub(); };
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setIsLoggedIn(!!user);
+    });
+
+    return () => {
+      clearTimeout(timer);
+      unsub();
+    };
   }, []);
 
   if (!isReady) return <SplashScreen />;
@@ -23,6 +29,7 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="signup" />
+        <Stack.Screen name="forgotpassword" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="detail" />
         <Stack.Screen name="addplace" />
@@ -31,6 +38,7 @@ export default function RootLayout() {
         <Stack.Screen name="editprofile" />
         <Stack.Screen name="userprofile" />
       </Stack>
+
       {isLoggedIn && <InAppNotification />}
     </View>
   );
