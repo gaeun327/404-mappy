@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity, ScrollView,
   Dimensions, ActivityIndicator, FlatList, Alert, Modal,
-  TextInput, KeyboardAvoidingView, Platform,
+  TextInput, KeyboardAvoidingView, Platform,Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -412,6 +412,26 @@ await deleteDoc(placeRef);
     detailAddress && detailAddress !== 'undefined' && detailAddress !== '' ? detailAddress : null,
   ].filter(Boolean).join(' ');
 
+  const openNavigation = async () => {
+  if (!fullAddress) {
+    Alert.alert('알림', '주소 정보가 없어요.');
+    return;
+  }
+
+  const encodedAddress = encodeURIComponent(fullAddress);
+
+  const url = Platform.select({
+    ios: `http://maps.apple.com/?daddr=${encodedAddress}`,
+    android: `geo:0,0?q=${encodedAddress}`,
+  });
+
+  try {
+    await Linking.openURL(url);
+  } catch (e) {
+    Alert.alert('오류', '지도 앱을 열 수 없어요.');
+  }
+};
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -648,14 +668,37 @@ await deleteDoc(placeRef);
           {description ? <Text style={styles.reviewTxt}>{description}</Text> : null}
 
           {/* 위치 박스 */}
-          {fullAddress ? (
-            <View style={styles.infoCard}>
-              <View style={styles.infoRow}>
-                <Ionicons name="location-outline" size={16} color="#007AFF" />
-                <Text style={styles.infoTxt}>{fullAddress}</Text>
-              </View>
-            </View>
-          ) : null}
+ {fullAddress ? (
+  <>
+    <View style={styles.infoCard}>
+      <View style={styles.infoRow}>
+        <Ionicons
+          name="location-outline"
+          size={18}
+          color="#007AFF"
+        />
+        <Text style={styles.infoTxt}>
+          {fullAddress}
+        </Text>
+      </View>
+    </View>
+
+    <TouchableOpacity
+      style={styles.navigationBtn}
+      onPress={openNavigation}
+      activeOpacity={0.8}
+    >
+      <Ionicons
+        name="navigate"
+        size={16}
+        color="#FFFFFF"
+      />
+      <Text style={styles.navigationBtnTxt}>
+        길찾기
+      </Text>
+    </TouchableOpacity>
+  </>
+) : null}
 
           {/* 카테고리 + 테마 태그 한 줄 */}
           {(category || parsedTags.length > 0) && (
@@ -886,4 +929,21 @@ noImageHeaderRight: {
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, paddingHorizontal: 8 },
   menuItemTxt: { fontSize: 16, fontWeight: '600', color: '#1C1C1E' },
   menuDivider: { height: 1, backgroundColor: '#F2F2F7' },
+
+navigationBtn: {
+  height: 42,
+  borderRadius: 12,
+  backgroundColor: '#007AFF',
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+  marginBottom: 16,
+},
+
+navigationBtnTxt: {
+  fontSize: 14,
+  fontWeight: '700',
+  color: '#FFFFFF',
+},
 });

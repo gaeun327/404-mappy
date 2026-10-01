@@ -20,24 +20,24 @@ const CATEGORY_MAP = {
 };
 
 const QUICK_PROMPTS = [
-  '혼자 조용히 공부하기 좋은 곳 추천해줘',
-  '친구들이랑 갈 만한 맛집 있어?',
-  '데이트하기 좋은 분위기 있는 카페',
-  '야경 볼 수 있는 곳 알려줘',
-  '가성비 좋은 곳 추천해줘',
-  '요즘 핫한 팝업 있어?',
+  '혼자 공부하기 좋은 곳',
+  '친구들과 갈 맛집',
+  '데이트하기 좋은 카페',
+  '야경 보기 좋은 곳',
+  '가성비 좋은 곳',
+  '요즘 핫한 팝업',
 ];
 
 export default function AiRecommendTab() {
   const router = useRouter();
+  const [showQuickMenu, setShowQuickMenu] = useState(false);
   const scrollRef = useRef(null);
   const [allPlaces, setAllPlaces] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      text: '안녕하세요! 어떤 장소를 찾고 계신가요? 🗺️\n자유롭게 말씀해주세요!',
-      places: [],
+text: '오늘은 어떤 곳을 찾고 계신가요? ✨\n친구들의 장소 기록에서 딱 맞는 곳을 찾아드릴게요.',      places: [],
     }
   ]);
   const [input, setInput] = useState('');
@@ -89,22 +89,51 @@ export default function AiRecommendTab() {
         likes: (p.likes ?? []).length,
       }));
 
-      const systemPrompt = `당신은 Mappy 앱의 장소 추천 AI입니다. 
-사용자의 요청에 맞는 장소를 피드 데이터에서 찾아 추천해주세요.
+     const systemPrompt = `당신은 MAPPY 앱의 장소 추천 AI입니다.
+사용자의 요청에 맞는 장소를 지인들이 등록한 장소 데이터에서 찾아 추천해주세요.
 
-피드에 등록된 장소 데이터 (JSON):
+등록된 장소 데이터 (JSON):
 ${JSON.stringify(placesContext, null, 2)}
 
 규칙:
-1. 반드시 위 데이터에 있는 장소만 추천하세요.
-2. 응답은 반드시 아래 JSON 형식으로만 해주세요 (다른 텍스트 없이):
+1. 반드시 위 데이터에 존재하는 장소만 추천하세요.
+
+2. 사용자의 요청과 각 장소의 카테고리, 설명, 태그,
+추천·주의 기록, 좋아요 수를 종합해서 적합한 장소를 선택하세요.
+
+3. 각 장소를 추천한 이유를 반드시 작성하세요.
+추천 이유는 위에 제공된 장소 데이터에 근거해야 하며,
+데이터에 없는 정보는 추측하거나 만들어내지 마세요.
+
+4. 응답은 반드시 아래 JSON 형식으로만 작성하세요.
+다른 텍스트는 작성하지 마세요.
+
 {
-  "message": "사용자에게 전달할 친근한 추천 메시지 (2-3문장)",
-  "recommendedIds": ["장소id1", "장소id2", "장소id3"]
+  "message": "추천 결과를 소개하는 친근한 메시지",
+  "recommendations": [
+    {
+      "id": "장소id",
+      "reason": "이 장소를 추천한 이유"
+    }
+  ]
 }
-3. 적합한 장소가 없으면 recommendedIds를 빈 배열로 하고 message에 안내 메시지를 써주세요.
-4. 최대 3개까지만 추천하세요.
-5. message는 한국어로, 친근하고 자연스럽게 써주세요.`;
+
+5. 최대 3개의 장소만 추천하세요.
+
+6. 적합한 장소가 없으면 recommendations를 빈 배열로 작성하고,
+message에 조건에 맞는 장소가 없다고 안내하세요.
+
+7. message와 reason은 한국어로 친근하고 자연스럽게 작성하세요.
+
+8. 추천 이유는 장소당 1~2문장으로 짧게 작성하세요.
+
+9. 사용자가 요청한 조건과 직접 관련 있는 정보를 우선적으로 고려하세요.
+
+10. 좋아요 수는 참고 요소로만 사용하고,
+사용자의 요청 조건과의 일치도를 더 중요하게 판단하세요.
+
+11. '친구들이 많이 좋아하는 곳', '인기 있는 곳' 등
+제공된 데이터만으로 확인할 수 없는 사실은 단정하지 마세요.`;
 
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`,
@@ -121,24 +150,35 @@ ${JSON.stringify(placesContext, null, 2)}
   temperature: 0.4,
   maxOutputTokens: 2000,
   responseMimeType: 'application/json',
-  responseSchema: {
-    type: 'OBJECT',
-    properties: {
-      message: {
-        type: 'STRING',
-      },
-      recommendedIds: {
-        type: 'ARRAY',
-        items: {
-          type: 'STRING',
+responseSchema: {
+  type: 'OBJECT',
+  properties: {
+    message: {
+      type: 'STRING',
+    },
+
+    recommendations: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          id: {
+            type: 'STRING',
+          },
+          reason: {
+            type: 'STRING',
+          },
         },
+        required: ['id', 'reason'],
       },
     },
-    required: [
-      'message',
-      'recommendedIds',
-    ],
   },
+
+  required: [
+    'message',
+    'recommendations',
+  ],
+},
 },
           }),
         }
@@ -153,7 +193,7 @@ const raw = (
   .join('')
   .trim();      console.log('raw text:', raw);
 
-      let parsed = { message: '죄송해요, 추천을 찾지 못했어요.', recommendedIds: [] };
+      let parsed = { message: '죄송해요, 추천을 찾지 못했어요.', recommendations: [] };
       try {
         // 마크다운 코드블록, 앞뒤 공백 제거
         const clean = raw.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -163,13 +203,24 @@ const raw = (
 
   parsed = {
     message: '추천 결과를 불러오지 못했어요. 다시 한 번 질문해주세요!',
-    recommendedIds: [],
+    recommendations: [],
   };
 }
 
-      const recommendedPlaces = (parsed.recommendedIds ?? [])
-        .map(id => allPlaces.find(p => p.id === id))
-        .filter(Boolean);
+    const recommendedPlaces = (parsed.recommendations ?? [])
+  .map((recommendation) => {
+    const place = allPlaces.find(
+      (p) => p.id === recommendation.id
+    );
+
+    if (!place) return null;
+
+    return {
+      ...place,
+      aiReason: recommendation.reason,
+    };
+  })
+  .filter(Boolean);
 
       const aiMsg = {
         role: 'assistant',
@@ -214,7 +265,7 @@ const raw = (
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={90}
+        keyboardVerticalOffset={0}
       >
         {/* 헤더 */}
         <View style={styles.header}>
@@ -222,10 +273,13 @@ const raw = (
             <View style={styles.aiDot} />
             <Text style={styles.headerLabel}>AI MAPPY</Text>
           </View>
-          <Text style={styles.headerTitle}>장소 추천</Text>
-          <Text style={styles.headerSub}>
-            {dataLoading ? '데이터 불러오는 중...' : `${allPlaces.length}개 장소 분석 완료`}
-          </Text>
+<Text style={styles.headerTitle}>장소 추천</Text>
+
+<Text style={styles.headerSub}>
+  {dataLoading
+    ? '친구들의 장소 기록을 불러오는 중...'
+    : `친구들과 공유한 ${allPlaces.length}개의 장소를 바탕으로 추천해요`}
+</Text>
         </View>
 
         {/* 채팅 영역 */}
@@ -235,20 +289,48 @@ const raw = (
           contentContainerStyle={styles.chatContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* 빠른 질문 버튼 */}
-          {messages.length === 1 && (
-            <View style={styles.quickSection}>
-              <Text style={styles.quickLabel}>자주 찾는 질문</Text>
-              <View style={styles.quickWrap}>
-                {QUICK_PROMPTS.map((q, i) => (
-                  <TouchableOpacity key={i} style={styles.quickBtn} onPress={() => sendMessage(q)} activeOpacity={0.7}>
-                    <Ionicons name="search-outline" size={13} color="#8B5CF6" style={{ marginRight: 6 }} />
-                    <Text style={styles.quickBtnTxt}>{q}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
+          {/* MAPPY 추천 기준 */}
+{messages.length === 1 && !dataLoading && (
+  <View style={styles.criteriaCard}>
+    <View style={styles.criteriaHeader}>
+      <View style={styles.criteriaIcon}>
+        <Ionicons name="sparkles" size={14} color="#8B5CF6" />
+      </View>
+
+      <View style={{ flex: 1 }}>
+        <Text style={styles.criteriaTitle}>
+          MAPPY의 추천 기준
+        </Text>
+        <Text style={styles.criteriaSub}>
+          내 요청과 지인들의 장소 기록을 함께 분석해요
+        </Text>
+      </View>
+    </View>
+
+    <View style={styles.criteriaItems}>
+      <View style={styles.criteriaItem}>
+        <Ionicons name="people-outline" size={15} color="#8B5CF6" />
+        <Text style={styles.criteriaItemText}>지인 장소</Text>
+      </View>
+
+      <View style={styles.criteriaItem}>
+        <Ionicons name="pricetag-outline" size={15} color="#8B5CF6" />
+        <Text style={styles.criteriaItemText}>태그</Text>
+      </View>
+
+      <View style={styles.criteriaItem}>
+        <Ionicons name="thumbs-up-outline" size={15} color="#8B5CF6" />
+        <Text style={styles.criteriaItemText}>추천·주의</Text>
+      </View>
+
+      <View style={styles.criteriaItem}>
+        <Ionicons name="heart-outline" size={15} color="#8B5CF6" />
+        <Text style={styles.criteriaItemText}>좋아요</Text>
+      </View>
+    </View>
+  </View>
+)}
+          
 
           {/* 메시지 목록 */}
           {messages.map((msg, idx) => (
@@ -268,11 +350,14 @@ const raw = (
               {msg.places?.length > 0 && (
                 <View style={styles.placeCards}>
                   <Text style={styles.placeCardsLabel}>추천 장소 {msg.places.length}곳</Text>
-                  {msg.places.map((place, pi) => (
-                    <TouchableOpacity key={pi} style={styles.placeCard} onPress={() => goToDetail(place)} activeOpacity={0.85}>
-                      <View style={[styles.placeRankBadge, pi === 0 && styles.placeRankBadgeFirst]}>
-                        <Text style={[styles.placeRank, pi === 0 && { color: '#fff' }]}>{pi + 1}</Text>
-                      </View>
+                  {msg.places.map((place) => (
+                   <TouchableOpacity
+  key={place.id}
+  style={styles.placeCard}
+  onPress={() => goToDetail(place)}
+  activeOpacity={0.85}
+>
+                      
                       <View style={styles.placeCardBody}>
                         <View style={styles.placeNameRow}>
                           <Text style={styles.placeName} numberOfLines={1}>{place.title}</Text>
@@ -289,6 +374,24 @@ const raw = (
                           </View>
                         ) : null}
                         {place.description ? <Text style={styles.placeDesc} numberOfLines={2}>{place.description}</Text> : null}
+                        {place.aiReason ? (
+  <View style={styles.reasonBox}>
+    <View style={styles.reasonTitleRow}>
+      <Ionicons
+        name="sparkles"
+        size={12}
+        color="#8B5CF6"
+      />
+      <Text style={styles.reasonTitle}>
+        MAPPY 추천 이유
+      </Text>
+    </View>
+
+    <Text style={styles.reasonText}>
+      {place.aiReason}
+    </Text>
+  </View>
+) : null}
                         {place.tags?.length > 0 && (
                           <View style={styles.tagRow}>
                             {place.tags.slice(0, 3).map((t, ti) => (
@@ -322,10 +425,68 @@ const raw = (
               </View>
             </View>
           )}
-        </ScrollView>
+</ScrollView>
 
-        {/* 입력창 */}
-        <View style={styles.inputBar}>
+{/* 빠른 질문 메뉴 */}
+<View style={styles.quickMenuArea}>
+
+  {/* 펼쳐지는 질문 목록 */}
+  {showQuickMenu && (
+    <View style={styles.quickMenuList}>
+      {QUICK_PROMPTS.map((q, i) => (
+        <TouchableOpacity
+          key={i}
+          style={styles.quickMenuItem}
+          onPress={() => {
+            setShowQuickMenu(false);
+            sendMessage(q);
+          }}
+          disabled={aiLoading || dataLoading}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.quickMenuItemText}>
+            {q}
+          </Text>
+
+          <Ionicons
+            name="chevron-forward"
+            size={15}
+            color="#C7C7CC"
+          />
+        </TouchableOpacity>
+      ))}
+    </View>
+  )}
+
+  {/* 빠른 질문 열기/닫기 */}
+  <TouchableOpacity
+    style={styles.quickMenuToggle}
+    onPress={() => setShowQuickMenu((prev) => !prev)}
+    activeOpacity={0.7}
+  >
+    <View style={styles.quickMenuToggleLeft}>
+      <Ionicons
+        name="sparkles"
+        size={15}
+        color="#8B5CF6"
+      />
+
+      <Text style={styles.quickMenuToggleText}>
+        빠른 질문
+      </Text>
+    </View>
+
+    <Ionicons
+      name={showQuickMenu ? 'chevron-down' : 'chevron-up'}
+      size={17}
+      color="#8E8E93"
+    />
+  </TouchableOpacity>
+
+</View>
+
+{/* 입력창 */}
+<View style={styles.inputBar}>
           <View style={styles.inputWrap}>
             <Ionicons name="location-outline" size={16} color="#8B5CF6" style={{ marginLeft: 14 }} />
             <TextInput
@@ -337,8 +498,8 @@ const raw = (
               multiline
               maxLength={200}
               editable={!dataLoading}
-              returnKeyType="send"
-              onSubmitEditing={() => sendMessage(input)}
+              returnKeyType="default"
+              
             />
           </View>
           <TouchableOpacity
@@ -374,15 +535,32 @@ const styles = StyleSheet.create({
 
   quickSection: { marginBottom: 24 },
   quickLabel: { fontSize: 12, fontWeight: '700', color: '#AEAEB2', letterSpacing: 0.5, marginBottom: 10 },
-  quickWrap: { gap: 8 },
-  quickBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 11, borderRadius: 14,
-    backgroundColor: 'white',
-    borderWidth: 1, borderColor: '#EEE8FF',
-    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 1,
-  },
-  quickBtnTxt: { fontSize: 13, color: '#3A3A3C', fontWeight: '500', flex: 1 },
+ quickWrap: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 8,
+},
+
+quickBtn: {
+  flexDirection: 'row',
+  alignItems: 'center',
+
+  paddingHorizontal: 12,
+  paddingVertical: 9,
+
+  borderRadius: 18,
+
+  backgroundColor: '#FFFFFF',
+
+  borderWidth: 1,
+  borderColor: '#EEE8FF',
+},
+
+quickBtnTxt: {
+  fontSize: 12,
+  color: '#3A3A3C',
+  fontWeight: '600',
+},
 
   bubble: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 14 },
   bubbleUser: { justifyContent: 'flex-end', marginBottom: 14 },
@@ -465,4 +643,148 @@ const styles = StyleSheet.create({
     backgroundColor: '#8B5CF6', justifyContent: 'center', alignItems: 'center',
     shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 5,
   },
+  criteriaCard: {
+  backgroundColor: '#F8F5FF',
+  borderRadius: 18,
+  padding: 16,
+  marginBottom: 20,
+  borderWidth: 1,
+  borderColor: '#EEE8FF',
+},
+
+criteriaHeader: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 10,
+  marginBottom: 14,
+},
+
+criteriaIcon: {
+  width: 30,
+  height: 30,
+  borderRadius: 15,
+  backgroundColor: '#EEE8FF',
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+
+criteriaTitle: {
+  fontSize: 14,
+  fontWeight: '800',
+  color: '#1C1C1E',
+  marginBottom: 2,
+},
+
+criteriaSub: {
+  fontSize: 11,
+  color: '#8E8E93',
+},
+
+criteriaItems: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 8,
+},
+
+criteriaItem: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 5,
+  backgroundColor: '#FFFFFF',
+  paddingHorizontal: 10,
+  height: 32,
+  borderRadius: 16,
+},
+
+criteriaItemText: {
+  fontSize: 12,
+  fontWeight: '600',
+  color: '#5C5C5E',
+},
+reasonBox: {
+  backgroundColor: '#F8F5FF',
+  borderRadius: 10,
+  paddingHorizontal: 10,
+  paddingVertical: 8,
+  marginTop: 4,
+  marginBottom: 7,
+},
+
+reasonTitleRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 4,
+  marginBottom: 4,
+},
+
+reasonTitle: {
+  fontSize: 11,
+  fontWeight: '800',
+  color: '#8B5CF6',
+},
+
+reasonText: {
+  fontSize: 12,
+  lineHeight: 17,
+  color: '#5C5C5E',
+  fontWeight: '500',
+},
+quickMenuArea: {
+  backgroundColor: '#FFFFFF',
+  borderTopWidth: 1,
+  borderTopColor: '#F0F0F5',
+},
+
+quickMenuList: {
+  backgroundColor: '#FFFFFF',
+  paddingHorizontal: 16,
+  paddingTop: 8,
+  borderRadius: 16,
+  overflow: 'hidden',
+},
+
+quickMenuItem: {
+  minHeight: 46,
+  paddingHorizontal: 14,
+
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+
+  backgroundColor: '#F7F7F8',
+
+  borderRadius: 16,
+  marginBottom: 6,
+},
+
+
+quickMenuItemText: {
+  flex: 1,
+  fontSize: 13,
+  fontWeight: '600',
+  color: '#3A3A3C',
+},
+
+quickMenuToggle: {
+  height: 42,
+  paddingHorizontal: 18,
+
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+
+  backgroundColor: '#FFFFFF',
+},
+
+quickMenuToggleLeft: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 6,
+},
+
+quickMenuToggleText: {
+  fontSize: 13,
+  fontWeight: '700',
+  color: '#5C5C5E',
+},
 });

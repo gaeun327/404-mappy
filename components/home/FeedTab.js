@@ -94,6 +94,12 @@ export default function FeedTab() {
   const [activeFilter, setActiveFilter] = useState('전체');
   const [activeCategory, setActiveCategory] = useState('전체');
 
+  
+
+  // 친구별 피드 필터
+const [friends, setFriends] = useState([]);
+const [selectedFriendUids, setSelectedFriendUids] = useState([]);
+
   const [searchText, setSearchText] = useState('');
   const [isSearching, setIsSearching] = useState(false);
 
@@ -127,6 +133,29 @@ export default function FeedTab() {
       const friendUids = myDoc.exists()
         ? myDoc.data().friends ?? []
         : [];
+        // 친구 UID → 친구 정보(닉네임) 불러오기
+const friendList = await Promise.all(
+  friendUids.map(async (uid) => {
+    try {
+      const friendSnap = await getDoc(
+        doc(db, 'users', uid)
+      );
+
+      if (!friendSnap.exists()) return null;
+
+      const data = friendSnap.data();
+
+      return {
+        uid,
+        nickname: data.nickname || '친구',
+      };
+    } catch (e) {
+      return null;
+    }
+  })
+);
+
+setFriends(friendList.filter(Boolean));
 
       const allowedUids = [
         myUid,
@@ -404,6 +433,16 @@ export default function FeedTab() {
           activeCategory
         );
       })
+
+      .filter((item) => {
+  // 선택한 친구가 없으면 전체 보기
+  if (selectedFriendUids.length === 0) {
+    return true;
+  }
+
+  // 선택한 친구가 작성한 글만 보기
+  return selectedFriendUids.includes(item.userUid);
+})
       .filter((item) => {
         if (
           !searchText.trim()
@@ -493,19 +532,10 @@ export default function FeedTab() {
 
 
   // 적용된 필터 개수
-  const activeFilterCount =
-    (
-      activeFilter !==
-      '전체'
-        ? 1
-        : 0
-    ) +
-    (
-      activeCategory !==
-      '전체'
-        ? 1
-        : 0
-    );
+ const activeFilterCount =
+  (activeFilter !== '전체' ? 1 : 0) +
+  (activeCategory !== '전체' ? 1 : 0) +
+  (selectedFriendUids.length > 0 ? 1 : 0);
 
 
   // =========================
@@ -1496,6 +1526,73 @@ export default function FeedTab() {
                 </View>
               </ScrollView>
 
+              {/* 친구 */}
+<Text
+  style={[
+    styles.sheetSectionTitle,
+    { marginTop: 24 },
+  ]}
+>
+  친구
+</Text>
+
+<View style={styles.sheetOptionWrap}>
+  <TouchableOpacity
+    onPress={() => setSelectedFriendUids([])}
+    style={[
+      styles.categoryPill,
+      selectedFriendUids.length === 0 &&
+        styles.categoryPillActive,
+    ]}
+    activeOpacity={0.75}
+  >
+    <Text
+      style={[
+        styles.categoryPillTxt,
+        selectedFriendUids.length === 0 &&
+          styles.categoryPillTxtActive,
+      ]}
+    >
+      👥 전체 친구
+    </Text>
+  </TouchableOpacity>
+
+  {friends.map((friend) => {
+    const isSelected =
+      selectedFriendUids.includes(friend.uid);
+
+    return (
+      <TouchableOpacity
+        key={friend.uid}
+        onPress={() => {
+          setSelectedFriendUids((prev) =>
+            prev.includes(friend.uid)
+              ? prev.filter(
+                  (uid) => uid !== friend.uid
+                )
+              : [...prev, friend.uid]
+          );
+        }}
+        style={[
+          styles.categoryPill,
+          isSelected && styles.categoryPillActive,
+        ]}
+        activeOpacity={0.75}
+      >
+        <Text
+          style={[
+            styles.categoryPillTxt,
+            isSelected &&
+              styles.categoryPillTxtActive,
+          ]}
+        >
+          {friend.nickname}
+        </Text>
+      </TouchableOpacity>
+    );
+  })}
+</View>
+
 
               {/* 하단 버튼 */}
               <View
@@ -1516,6 +1613,7 @@ export default function FeedTab() {
                     setActiveCategory(
                       '전체'
                     );
+                    setSelectedFriendUids([]);
                   }}
                 >
                   <Ionicons

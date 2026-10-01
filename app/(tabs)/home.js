@@ -347,6 +347,11 @@ export default function HomeScreen() {
   const groupedPins =
     groupNearbyPins(pins, 20);
 
+    // 친구별 지도 필터
+const [friends, setFriends] = useState([]);
+const [selectedFriendUid, setSelectedFriendUid] = useState('전체');
+const [showFriendFilter, setShowFriendFilter] = useState(false);
+
 
   // ========================================
   // 로딩
@@ -570,6 +575,29 @@ export default function HomeScreen() {
                 .friends ?? []
             )
           : [];
+      // 친구 UID → 닉네임 불러오기
+const friendList = await Promise.all(
+  friendUids.map(async (uid) => {
+    try {
+      const friendSnap = await getDoc(
+        doc(db, 'users', uid)
+      );
+
+      if (!friendSnap.exists()) return null;
+
+      const data = friendSnap.data();
+
+      return {
+        uid,
+        nickname: data.nickname || '친구',
+      };
+    } catch (e) {
+      return null;
+    }
+  })
+);
+
+setFriends(friendList.filter(Boolean));
 
       const allowedUids = [
         myUid,
@@ -1223,7 +1251,50 @@ const handleSearchPlacePress = () => {
         setNearbyCount(0);
       }
     };
+    // ========================================
+// 친구별 지도 필터
+// ========================================
 
+const handleFriendFilter = (friendUid) => {
+  setSelectedFriendUid(friendUid);
+
+  let filtered = allPins;
+
+  // 특정 친구를 선택한 경우
+  if (friendUid !== '전체') {
+    filtered = filtered.filter(
+      (p) => p.userUid === friendUid
+    );
+  }
+
+  // 현재 선택된 카테고리도 같이 적용
+  if (selectedCategory !== '전체') {
+    filtered = filtered.filter(
+      (p) => p.category === selectedCategory
+    );
+  }
+
+  setPins(filtered);
+
+  // 1km 내 장소 개수도 다시 계산
+  if (userLocation) {
+    const nearby = filtered.filter(
+      (p) =>
+        getDistance(
+          userLocation.latitude,
+          userLocation.longitude,
+          p.latitude,
+          p.longitude
+        ) <= 1000
+    );
+
+    setNearbyCount(nearby.length);
+  } else {
+    setNearbyCount(0);
+  }
+
+  setShowFriendFilter(false);
+};
 
   return (
     <View style={styles.container}>
@@ -1500,8 +1571,8 @@ const handleSearchPlacePress = () => {
           ) : null}
 
         </View>
-
-
+        
+       
         {/* ============================= */}
         {/* 검색 결과 */}
         {/* ============================= */}
@@ -1696,6 +1767,41 @@ const handleSearchPlacePress = () => {
 
           keyboardShouldPersistTaps="handled"
         >
+             {/* 친구별 지도 필터 */}
+
+  <TouchableOpacity
+    style={styles.friendFilterBtn}
+    onPress={() =>
+      setShowFriendFilter((prev) => !prev)
+    }
+    activeOpacity={0.8}
+  >
+    <Ionicons
+      name="people-outline"
+      size={17}
+      color="#007AFF"
+    />
+
+    <Text style={styles.friendFilterBtnText}>
+      {selectedFriendUid === '전체'
+        ? '전체 친구'
+        : friends.find(
+            (friend) =>
+              friend.uid === selectedFriendUid
+          )?.nickname || '친구'}
+    </Text>
+
+    <Ionicons
+      name={
+        showFriendFilter
+          ? 'chevron-up'
+          : 'chevron-down'
+      }
+      size={15}
+      color="#8E8E93"
+    />
+  </TouchableOpacity>
+
 
           {[
             {
@@ -1817,7 +1923,67 @@ const handleSearchPlacePress = () => {
           ))}
 
         </ScrollView>
+          {/* 친구 필터 드롭다운 */}
+{showFriendFilter && (
+  <View style={styles.friendDropdown}>
 
+    {/* 전체 친구 */}
+    <TouchableOpacity
+      style={styles.friendDropdownItem}
+      onPress={() => handleFriendFilter('전체')}
+      activeOpacity={0.7}
+    >
+      <Text
+        style={[
+          styles.friendDropdownText,
+          selectedFriendUid === '전체' &&
+            styles.friendDropdownTextActive,
+        ]}
+      >
+        전체 친구
+      </Text>
+
+      {selectedFriendUid === '전체' && (
+        <Ionicons
+          name="checkmark"
+          size={18}
+          color="#007AFF"
+        />
+      )}
+    </TouchableOpacity>
+
+    {/* 친구 목록 */}
+    {friends.map((friend) => (
+      <TouchableOpacity
+        key={friend.uid}
+        style={styles.friendDropdownItem}
+        onPress={() =>
+          handleFriendFilter(friend.uid)
+        }
+        activeOpacity={0.7}
+      >
+        <Text
+          style={[
+            styles.friendDropdownText,
+            selectedFriendUid === friend.uid &&
+              styles.friendDropdownTextActive,
+          ]}
+        >
+          {friend.nickname}
+        </Text>
+
+        {selectedFriendUid === friend.uid && (
+          <Ionicons
+            name="checkmark"
+            size={18}
+            color="#007AFF"
+          />
+        )}
+      </TouchableOpacity>
+    ))}
+
+  </View>
+)}
       </View>
 
 
@@ -2537,20 +2703,20 @@ const styles = StyleSheet.create({
   },
 
 
-  filterBtn: {
-    backgroundColor:
-      'white',
+ filterBtn: {
+  height: 36,
+  paddingHorizontal: 14,
+  borderRadius: 18,
 
-    paddingHorizontal: 15,
+  backgroundColor: '#FFFFFF',
 
-    paddingVertical: 8,
+  alignItems: 'center',
+  justifyContent: 'center',
 
-    borderRadius: 20,
+  marginRight: 8,
 
-    marginRight: 8,
-
-    elevation: 2,
-  },
+  elevation: 2,
+},
 
 
   filterBtnActive: {
@@ -2988,5 +3154,78 @@ emptyMapDescription: {
   fontSize: 12,
   lineHeight: 17,
   color: '#8E8E93',
+},
+
+
+
+friendFilterBtn: {
+  height: 36,
+  paddingHorizontal: 12,
+  borderRadius: 18,
+
+  backgroundColor: '#FFFFFF',
+
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+
+  gap: 5,
+  marginRight: 8,
+
+  borderWidth: 1,
+  borderColor: '#E5E5EA',
+
+  alignSelf: 'center',
+},
+
+friendFilterBtnText: {
+  fontSize: 13,
+  fontWeight: '700',
+  color: '#1C1C1E',
+},
+
+friendDropdown: {
+  position: 'absolute',
+
+  top: 100,
+  left: 20,
+
+  width: 165,
+
+  backgroundColor: '#FFFFFF',
+  borderRadius: 12,
+
+  paddingVertical: 4,
+
+  shadowColor: '#000',
+  shadowOffset: {
+    width: 0,
+    height: 3,
+  },
+  shadowOpacity: 0.12,
+  shadowRadius: 8,
+
+  elevation: 8,
+  zIndex: 100,
+},
+
+friendDropdownItem: {
+  height: 38,
+  paddingHorizontal: 12,
+
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+},
+
+friendDropdownText: {
+  fontSize: 13,
+  fontWeight: '600',
+  color: '#1C1C1E',
+},
+
+friendDropdownTextActive: {
+  color: '#007AFF',
+  fontWeight: '700',
 },
 });
