@@ -40,7 +40,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "위치 기반 서비스를 위해 위치 접근이 필요합니다."
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }

@@ -9,7 +9,14 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import { db, auth, storage } from '../firebaseConfig';
-import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
+import {
+  collection,
+  addDoc,
+  doc,
+  updateDoc,
+  getDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const CATEGORIES = [
@@ -297,7 +304,76 @@ const handleSave = async () => {
         return;
       }
     }
+    // ==========================================
+// 친구들에게 새 장소 등록 알림 보내기
+// ==========================================
+try {
+  const myUid = auth.currentUser?.uid;
 
+  if (myUid) {
+    const myUserSnap = await getDoc(
+      doc(db, 'users', myUid)
+    );
+
+    if (myUserSnap.exists()) {
+      const myData = myUserSnap.data();
+      const friendUids = myData.friends ?? [];
+
+      const senderNickname =
+        myData.nickname ||
+        auth.currentUser?.displayName ||
+        '친구';
+
+      console.log('새 장소 알림 체크:', {
+        myUid,
+        friendCount: friendUids.length,
+        placeId: docRef.id,
+        placeTitle: pinTitle.trim(),
+      });
+
+      await Promise.all(
+        friendUids.map((friendUid) =>
+          addDoc(
+            collection(db, 'notifications'),
+            {
+              recipientUid: friendUid,
+
+              senderUid: myUid,
+
+              senderEmail:
+                auth.currentUser?.email ?? '',
+
+              senderNickname,
+
+              type: 'friend_place',
+
+              title: '친구의 새 장소 📍',
+
+              body: `${senderNickname}님이 '${pinTitle.trim()}'을(를) 새로 등록했어요.`,
+
+              placeId: docRef.id,
+
+              placeTitle: pinTitle.trim(),
+
+              read: false,
+              feedSeen: false,
+
+              createdAt: serverTimestamp(),
+            }
+          )
+        )
+      );
+
+      console.log('친구 새 장소 알림 저장 완료');
+    }
+  }
+} catch (notificationError) {
+  // 알림 저장이 실패해도 장소 등록 자체는 성공 처리
+  console.log(
+    '친구 새 장소 알림 저장 오류:',
+    notificationError
+  );
+}
     Alert.alert(
       '완료',
       '장소가 등록되었습니다! 🎉',

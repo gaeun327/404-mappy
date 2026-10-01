@@ -1378,6 +1378,38 @@ const handleSearchPlacePress = () => {
 )}
 
       </MapView>
+{/* ============================= */}
+{/* 장소가 없을 때 안내 */}
+{/* ============================= */}
+
+{!loading && allPins.length === 0 && !selectedSearchPlace && (
+  <View style={styles.emptyMapCard}>
+    <View style={styles.emptyMapIcon}>
+      <Ionicons
+        name="map-outline"
+        size={22}
+        color="#007AFF"
+      />
+    </View>
+
+    <View style={styles.emptyMapContent}>
+      <Text style={styles.emptyMapTitle}>
+        아직 저장된 장소가 없어요
+      </Text>
+
+      <Text style={styles.emptyMapDescription}>
+        장소를 검색하거나 + 버튼을 눌러{'\n'}
+        첫 번째 장소를 기록해보세요!
+      </Text>
+    </View>
+
+    <Ionicons
+      name="arrow-down"
+      size={23}
+      color="#007AFF"
+    />
+  </View>
+)}
 
 
       {/* ============================= */}
@@ -2490,7 +2522,10 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
 
-
+  emptyMapArrow: {
+  marginLeft: 8,
+  transform: [{ rotate: '45deg' }],
+},
   // ======================================
   // 카테고리
   // ======================================
@@ -2589,7 +2624,7 @@ const styles = StyleSheet.create({
 
     bottom: 40,
 
-    left: 20,
+    right: 20,
 
     backgroundColor:
       '#007AFF',
@@ -2627,7 +2662,7 @@ const styles = StyleSheet.create({
 
     bottom: 40,
 
-    right: 20,
+    left: 20,
 
     backgroundColor:
       'white',
@@ -2896,5 +2931,62 @@ const styles = StyleSheet.create({
 
     color: '#3A3A3C',
   },
+  emptyMapCard: {
+  position: 'absolute',
+  left: 20,
+  right: 20,
+  bottom: 105,
 
+  flexDirection: 'row',
+  alignItems: 'center',
+
+  backgroundColor: 'white',
+  borderRadius: 18,
+
+  paddingHorizontal: 16,
+  paddingVertical: 14,
+
+  shadowColor: '#000',
+  shadowOffset: {
+    width: 0,
+    height: 3,
+  },
+  shadowOpacity: 0.1,
+  shadowRadius: 10,
+
+  elevation: 6,
+
+  zIndex: 10,
+},
+
+emptyMapIcon: {
+  width: 42,
+  height: 42,
+  borderRadius: 21,
+
+  backgroundColor: '#EAF3FF',
+
+  alignItems: 'center',
+  justifyContent: 'center',
+
+  marginRight: 12,
+},
+
+emptyMapContent: {
+  flex: 1,
+},
+
+emptyMapTitle: {
+  fontSize: 14,
+  fontWeight: '700',
+  color: '#1C1C1E',
+
+  marginBottom: 3,
+},
+
+emptyMapDescription: {
+  fontSize: 12,
+  lineHeight: 17,
+  color: '#8E8E93',
+},
 });
